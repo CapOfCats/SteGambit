@@ -1,0 +1,19 @@
+.DS_Store
+Thumbs.db
+venv/
+env/
+ENV/
+.venv/
+*.env
+*.egg-info/
+dist/
+build/
+# Файлы PyCharm
+.idea/
+*.iml
+*.ipr
+*.iws
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+.cache/
