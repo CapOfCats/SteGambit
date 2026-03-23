@@ -16,18 +16,14 @@ class SteganoLogger:
 
         log_file = self.log_dir / f"stegambit_{datetime.now().strftime('%Y-%m-%d')}.log"
 
-        # Настройка стандартного логгера Python
         self.logger = logging.getLogger("SteGambit")
         self.logger.setLevel(logging.INFO)
 
-        # Формат записи: Время - Уровень - Сообщение
         formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', '%H:%M:%S')
 
-        # Обработчик для записи в файл
         file_handler = logging.FileHandler(log_file, encoding='utf-8')
         file_handler.setFormatter(formatter)
 
-        # Обработчик для вывода в консоль
         console_handler = logging.StreamHandler()
         console_handler.setFormatter(formatter)
 
