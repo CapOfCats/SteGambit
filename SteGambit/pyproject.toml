@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling>=1.20.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "stegambit"
+version = "0.1.0"
+description = "Multi-format steganography tool with Defense-in-Depth"
+requires-python = ">=3.10"
+dependencies = [
+    "PyQt6>=6.5.0",
+    "cryptography>=41.0.0",
+    "numpy>=1.24.0",
+    "Pillow>=10.0.0",
+    "imageio>=2.31.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.5.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/stegambit"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
