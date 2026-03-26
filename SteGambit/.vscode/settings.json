@@ -3,5 +3,4 @@
     "python.analysis.extraPaths": ["./src"],
     "python.linting.enabled": true,
     "editor.formatOnSave": true,
-    "editor.defaultFormatter": "ms-python.black-formatter"
 }
