@@ -18,8 +18,9 @@ class WavFormat(FileFormat):
             return np.frombuffer(data, dtype=np.int16)
     
     def save(self, data: np.ndarray, path: Path) -> None:
+        # TODO: Сохранять оригинальные параметры (channels, framerate, sampwidth) из исходника
         with wave.open(str(path), 'wb') as w:
-            w.setnchannels(1)
+            w.setnchannels(1)  # <- Тут заглушка, будем из метаданных брать
             w.setsampwidth(2)
-            w.setframerate(44100)
+            w.setframerate(44100) # <- тебя тоже касается
             w.writeframes(data.astype(np.int16).tobytes())
