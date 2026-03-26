@@ -30,3 +30,6 @@ packages = ["src/stegambit"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
+
+[project.gui-scripts]
+stegambit = "stegambit.gui.main_window:main"
