@@ -3,17 +3,25 @@ from pathlib import Path
 import numpy as np
 
 
-class StegoAlgorythm(ABC):
-    """Базовый класс для алгоритмов"""
+class IStegoProcessor(ABC):
+    """Интерфейс для алгоритмов"""
     
     @abstractmethod
-    def embed(self, container: np.ndarray, payload: bytes) -> np.ndarray:
-        """Внедрить данные в контейнер"""
+    def embed(self, container: np.ndarray, payload: bytes, coords: np.ndarray) -> np.ndarray:
+        """
+        Внедрить данные в контейнер по (координатам)
+        Args: 
+            coords np.ndarray формы (N, 2) с координатами пикселей/сэмплов
+        """
         pass
 
     @abstractmethod
-    def extract(self, container: np.ndarray) -> bytes:
-        """Извлечь данные"""
+    def extract(self, container: np.ndarray, coords: np.ndarray, length: int) -> bytes:
+        """
+        Извлечь данные (по координатам)
+        Args:
+            length длина payload в байтах (чтобы знать, когда остановиться)
+        """
         pass
 
 
