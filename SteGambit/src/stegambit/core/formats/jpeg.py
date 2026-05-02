@@ -18,4 +18,4 @@ class JpegFormat(FileFormat):
         return np.array(img)
     
     def save(self, data: np.ndarray, path: Path) -> None:
-        Image.fromarray(data).save(path, 'JPEG', quality=95)
+        Image.fromarray(data).save(path, 'JPEG', quality=100)
