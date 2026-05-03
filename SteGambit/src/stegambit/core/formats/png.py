@@ -13,6 +13,8 @@ class PngFormat(FileFormat):
     
     def load(self, path: Path) -> np.ndarray:
         img = Image.open(path)
+        if img.mode == 'RGBA':
+            img = img.convert('RGB')
         return np.array(img)
     
     def save(self, data: np.ndarray, path: Path) -> None:
