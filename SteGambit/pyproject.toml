@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling>=1.20.0"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "stegambit"
@@ -24,8 +24,8 @@ dev = [
     "mypy>=1.5.0",
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/stegambit"]
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
