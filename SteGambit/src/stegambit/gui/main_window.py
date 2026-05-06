@@ -29,14 +29,12 @@ class MainWindow(QMainWindow):
         self._connect_signals()
         self._set_status("Idle")
 
-    # ── Настройка окна ────────────────────────────────────────────────────
 
     def _setup_window(self):
         self.setWindowTitle("[ 🔒 ] SteGambit — Multi-format Steganography Tool")
         self.setMinimumSize(760, 520)
         self.resize(860, 580)
 
-    # ── Построение UI ─────────────────────────────────────────────────────
 
     def _build_ui(self):
         # Центральный виджет
@@ -108,9 +106,6 @@ class MainWindow(QMainWindow):
             self._set_status("Settings saved.")
 
     def _on_check_compatibility(self):
-        """
-        TODO #17: вызвать StegoController.validate(StegoTaskRequest). Сейчас — заглушка с демо-данными.
-        """
         cover = self.encode_panel.get_cover_path()
         payload = self.encode_panel.get_payload_path()
 
@@ -119,14 +114,48 @@ class MainWindow(QMainWindow):
             return
 
         self._set_status("Checking compatibility...")
-        self.encode_panel.set_compatibility_result(
-            "Format Identity: PNG (Magic: 89 50 4E 47)\n"
-            "Container Capacity: 1.2 MB\n"
-            "Payload Size (Encrypted): 450 KB\n"
-            "Estimation: [!!!!!!!! Fits comfortably]"
-        ) # заглушка - проверка вывода
-        self.encode_panel.set_hide_enabled(True)
-        self._set_status("Compatibility check passed. Ready to hide.")
+
+        try:
+            from stegambit.core.common.format_id import FormatIdentifier
+            fmt = FormatIdentifier().identify(cover)
+
+            cover_mb = cover.stat().st_size / (1024 * 1024)
+            payload_kb = payload.stat().st_size / 1024
+
+            with open(cover, "rb") as f:
+                magic_raw = f.read(8).hex(" ").upper()
+
+            _algo_map = {"PNG": "LSB", "WAV": "LSB", "JPEG": "DCT"}
+            algo = _algo_map.get(fmt, "?")
+
+            self.encode_panel.set_compatibility_result(
+                f"Format Identity: {fmt}  (Magic: {magic_raw})\n"
+                f"Algorithm Selected: {algo}\n"
+                f"Container Size: {cover_mb:.2f} MB\n"
+                f"Payload Size: {payload_kb:.1f} KB\n"
+                f"Estimation: [Capacity check — TODO #17]"
+            )
+            self.encode_panel.set_hide_enabled(True)
+            self._set_status(f"Compatibility check passed. Format: {fmt} → {algo}. Ready to hide.")
+
+        except ValueError as e:
+            self.encode_panel.set_compatibility_result(
+                f"⚠ Format not supported:\n{e}\n\nSupported: PNG, WAV, JPEG"
+            )
+            self.encode_panel.set_hide_enabled(False)
+            self._set_status(f"Compatibility check failed: {e}")
+
+        except FileNotFoundError:
+            self.encode_panel.set_compatibility_result("⚠ File not found. Check the path.")
+            self.encode_panel.set_hide_enabled(False)
+            self._set_status("File not found.")
+
+        except Exception as e:
+            self.encode_panel.set_compatibility_result(
+                f"⚠ Unexpected error:\n{type(e).__name__}: {e}"
+            )
+            self.encode_panel.set_hide_enabled(False)
+            self._set_status(f"Error: {type(e).__name__}")
 
     def _on_hide_requested(self):
         """
