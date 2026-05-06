@@ -13,6 +13,7 @@ dependencies = [
     "numpy>=1.24.0",
     "Pillow>=10.0.0",
     "imageio>=2.31.0",
+    "jpeglib>=1.0.0",
 ]
 
 [project.optional-dependencies]
