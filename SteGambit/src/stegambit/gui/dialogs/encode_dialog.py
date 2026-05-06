@@ -57,6 +57,11 @@ class EncodeDialog(QDialog):
         self.edit_pass1 = QLineEdit()
         self.edit_pass1.setEchoMode(QLineEdit.EchoMode.Password)
         self.edit_pass1.setPlaceholderText("[********]")
+        pass_row = QHBoxLayout()
+
+        self.edit_pass1 = QLineEdit()
+        self.edit_pass1.setEchoMode(QLineEdit.EchoMode.Password)
+        self.edit_pass1.setPlaceholderText("[********]")
         pass_row.addWidget(self.edit_pass1)
 
         self.edit_pass2 = QLineEdit()
@@ -64,11 +69,28 @@ class EncodeDialog(QDialog):
         self.edit_pass2.setPlaceholderText("[********]")
         pass_row.addWidget(self.edit_pass2)
 
-        self.lbl_match = QLabel("✅ Passphrases Match")
+        self.btn_toggle_pass = QPushButton("👁")
+        self.btn_toggle_pass.setFixedWidth(32)
+        self.btn_toggle_pass.setCheckable(True)
+        self.btn_toggle_pass.setToolTip("Show / hide passphrase")
+        self.btn_toggle_pass.setStyleSheet(
+            "border: 1px solid #4a4a4a; background: #2a2a2a;"
+            "color: #aaaaaa; border-radius: 3px;"
+        )
+        self.btn_toggle_pass.clicked.connect(self._toggle_pass_visibility)
+        pass_row.addWidget(self.btn_toggle_pass)
+
+        self.lbl_match = QLabel("Match!!!")
         self.lbl_match.setStyleSheet("color: #4aaa4a;")
         self.lbl_match.setVisible(False)
         pass_row.addWidget(self.lbl_match)
+
         g2_layout.addLayout(pass_row, 0, 1)
+
+        self.lbl_match_row = QLabel("")
+        self.lbl_match_row.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.lbl_match_row.setStyleSheet("color: #4aaa4a; font-size: 11px;")
+        g2_layout.addWidget(self.lbl_match_row, 1, 1)
 
         self.edit_pass1.textChanged.connect(self._check_passwords)
         self.edit_pass2.textChanged.connect(self._check_passwords)
@@ -118,7 +140,17 @@ class EncodeDialog(QDialog):
         )
         root.addWidget(self.log_box)
 
-    # ── Логика ───────────────────────────────────────────────────────────
+    def _toggle_pass_visibility(self, checked: bool) -> None:
+        mode = QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
+        self.edit_pass1.setEchoMode(mode)
+        self.edit_pass2.setEchoMode(mode)
+        self.btn_toggle_pass.setStyleSheet(
+            "border: 1px solid #4aaa4a; background: #1a2a1a;"
+            "color: #4aaa4a; border-radius: 3px;"
+            if checked else
+            "border: 1px solid #4a4a4a; background: #2a2a2a;"
+            "color: #aaaaaa; border-radius: 3px;"
+        )
 
     def _check_passwords(self):
         p1 = self.edit_pass1.text()
@@ -147,17 +179,16 @@ class EncodeDialog(QDialog):
         self.confirmed.emit(result)
         self.accept()
 
-    # ── Публичное API ─────────────────────────────────────────────────────
 
     def set_step1_valid(self, valid: bool, format_id: str = ""):
         if valid:
             self.lbl_step1.setText(
-                f"Step 1: [✅ Source Files Valid] (Magic Bytes identified: {format_id})"
+                f"Step 1: [!!! Source Files Valid] (Magic Bytes identified: {format_id})"
             )
             self.lbl_step1.setStyleSheet("color: #4aaa4a;")
         else:
             self.lbl_step1.setText(
-                "Step 1: [❌ Source Files Invalid] (Check file selection)"
+                "Step 1: [??? Source Files Invalid] (Check file selection)"
             )
             self.lbl_step1.setStyleSheet("color: #aa4a4a;")
 

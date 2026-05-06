@@ -14,6 +14,7 @@ class DecodePanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._password_visible = False
         self._build_ui()
 
     def _build_ui(self):
@@ -42,6 +43,16 @@ class DecodePanel(QWidget):
         self.edit_password.setEchoMode(QLineEdit.EchoMode.Password)
         self.edit_password.setPlaceholderText("[********]")
         pass_row.addWidget(self.edit_password)
+        self.btn_toggle_pw = QPushButton("👁")
+        self.btn_toggle_pw.setFixedWidth(32)
+        self.btn_toggle_pw.setCheckable(True)
+        self.btn_toggle_pw.setToolTip("Show / hide password")
+        self.btn_toggle_pw.setStyleSheet(
+            "border: 1px solid #4a4a4a; background: #2a2a2a;"
+            "color: #aaaaaa; border-radius: 3px;"
+        )
+        self.btn_toggle_pw.clicked.connect(self._toggle_password_visibility)
+        pass_row.addWidget(self.btn_toggle_pw)
         self.chk_use_coords = QCheckBox("Use Password-derived Coordinates")
         self.chk_use_coords.setChecked(True)
         pass_row.addWidget(self.chk_use_coords)
@@ -81,7 +92,20 @@ class DecodePanel(QWidget):
         )
         root.addWidget(self.log_box)
 
-    # ── Браузеры ──────────────────────────────────────────────────────────
+
+    def _toggle_password_visibility(self, checked: bool) -> None:
+        if checked:
+            self.edit_password.setEchoMode(QLineEdit.EchoMode.Normal)
+            self.btn_toggle_pw.setStyleSheet(
+                "border: 1px solid #4aaa4a; background: #1a2a1a;"
+                "color: #4aaa4a; border-radius: 3px;"
+            )
+        else:
+            self.edit_password.setEchoMode(QLineEdit.EchoMode.Password)
+            self.btn_toggle_pw.setStyleSheet(
+                "border: 1px solid #4a4a4a; background: #2a2a2a;"
+                "color: #aaaaaa; border-radius: 3px;"
+            )
 
     def _browse_stego(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -96,7 +120,6 @@ class DecodePanel(QWidget):
         if path:
             self.edit_output.setText(path)
 
-    # ── Публичное API ─────────────────────────────────────────────────────
 
     def set_log(self, text: str):
         self.log_box.setPlainText(text)
