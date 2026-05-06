@@ -70,7 +70,7 @@ _MID_FREQ_ZIGZAG_FLAT = (
 )
 
 
-class DctProcessor:
+class DctProcessor(IStegoProcessor[JpegContainer]):
     """JSteg-подобное встраивание в квантованные DCT-коэффициенты JPEG.
 
     Принципы (по ADR 007 + архитектурному чек-пойнту Архитектора):
@@ -112,7 +112,7 @@ class DctProcessor:
         )
         return global_flat_indices.astype(np.int64)
 
-    def embed(self, container: JpegContainer, payload: bytes, coords: np.ndarray) -> JpegContainer:
+    def embed(self, container: JpegContainer, payload: bytes, coords: np.ndarray, *, lsb_depth: int = 1) -> JpegContainer:
         """Встраивает payload в LSB выбранных DCT-коэффициентов Y-канала.
 
         Args:
@@ -128,6 +128,8 @@ class DctProcessor:
         Raises:
             ValueError: Если координат меньше, чем бит в payload.
         """
+        if lsb_depth != 1:
+            raise NotImplementedError("DCT: поддержан только lsb_depth=1")
         bits = np.unpackbits(np.frombuffer(payload, dtype=np.uint8))
         if coords.size < bits.size:
             raise ValueError(
@@ -146,7 +148,7 @@ class DctProcessor:
         # Y уже модифицирован (y_flat — view на y).
         return container
 
-    def extract(self, container: JpegContainer, coords: np.ndarray, length: int) -> bytes:
+    def extract(self, container: JpegContainer, coords: np.ndarray, length: int, *, lsb_depth=1) -> bytes:
         """Извлекает байт длины payload из LSB коэффициентов по координатам/coords.
 
         Важно: coords должны быть получены тем же способом, что при embed —
