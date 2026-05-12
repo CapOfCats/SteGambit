@@ -1,16 +1,18 @@
 """StegoService — главный Фасад пайплайна сокрытия."""
-import time
+
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+import struct
+import time
 
 from stegambit.core.common.format_id import FormatIdentifier
 from stegambit.core.formats.jpeg import JpegFormat, JpegContainer
 from stegambit.core.formats.png import PngFormat
 from stegambit.core.formats.wav import WavFormat
 from stegambit.core.stego.strategies import DctProcessor, LsbProcessor
-from stegambit.core.crypto.engine import CryptoEngine
+from stegambit.core.crypto.engine import CryptoEngine, FrameLayout
 from stegambit.core.stego.spreader import SmartSpreader
 from stegambit.models.dto import StegoTaskRequest, StegoResponse
 from stegambit.services.analytics.metrics import calculate_psnr
@@ -105,6 +107,134 @@ class StegoService:
         fmt_handler.save(stego, request.output_path)
 
         return StegoResponse(success=True, metrics=metrics)
+    
+    def extract_data(self, request: StegoTaskRequest) -> StegoResponse:
+        """Извлекает payload из стего-контейнера.
+
+        Зеркало hide_data:
+            1. Загружаем стего-контейнер.
+            2. Строим тот же пул координат (формат тот же -> пул тот же).
+            3. Spreader с тем же паролем -> те же координаты.
+            4. Извлекаем заголовок (57 байт), читаем LENGTH из него.
+            5. Извлекаем заголовок + ciphertext полным размером.
+            6. CryptoEngine.decrypt -> исходные байты.
+            7. Записываем в output_path.
+
+        Args:
+            request: StegoTaskRequest. carrier_path тут — это стего-файл,
+                     output_path — куда сохранить извлечённый payload.
+
+        Returns:
+            StegoResponse(success=True, output_path=...) при успехе.
+        """
+        t0 = time.perf_counter()
+
+        # 1. Определение формата стего-контейнера.
+        carrier_fmt = self._identifier.identify(request.carrier_path)
+        if carrier_fmt not in _FORMAT_REGISTRY:
+            raise CompatibilityError(
+                f"Формат '{carrier_fmt}' не поддержан. "
+                f"Поддержанные: {list(_FORMAT_REGISTRY)}"
+            )
+
+        # 2. Загрузка стего.
+        fmt_handler = _FORMAT_REGISTRY[carrier_fmt]()
+        stego = fmt_handler.load(request.carrier_path)
+
+        # 3. Тот же пул, что был при embed.
+        processor_kind = _FORMAT_TO_PROCESSOR[carrier_fmt]
+        pool, processor = self._build_pool(processor_kind, stego)
+
+        # 4. Извлечение заголовка (57 байт) для определения LENGTH.
+        header_size = CryptoEngine.header_size()  # 57 байт, понадобится в отдельной переменной
+        header_bits = header_size * 8
+
+        if pool.size < header_bits:
+            raise CompatibilityError(
+                "Стего-контейнер слишком мал даже для заголовка. "
+                "Возможно, файл не содержит payload."
+            )
+
+        # Spreader с тем же паролем даст те же координаты, что при embed.
+        spreader = SmartSpreader(passphrase=request.passphrase)
+
+        # 5. Извлекаем достаточно бит для парсинга длины.
+        #    Сначала тянем минимально нужное (заголовок), читаем LENGTH,
+        #    потом тянем полный фрейм.
+        coords_for_header = spreader.generate(
+            container=stego, payload_size=header_size
+        )
+        header_bytes = processor.extract(stego, coords_for_header, header_size)
+
+        # 6. Парсим LENGTH из заголовка (поле смещено на MAGIC+FLAGS+SALT+NONCE).
+        #    Чтобы не лезть руками, передадим заголовок в CryptoEngine —
+        #    он сам ругнётся на MAGIC, если что-то не так.
+        
+
+        if header_bytes[:FrameLayout.MAGIC_LEN] != FrameLayout.MAGIC:
+            raise RuntimeError(
+                "MAGIC bytes не найдены. Возможно, неверный пароль "
+                "или файл не содержит данных."
+            )
+
+        length_offset = (
+            FrameLayout.MAGIC_LEN
+            + FrameLayout.FLAGS_LEN
+            + FrameLayout.SALT_LEN
+            + FrameLayout.NONCE_LEN
+        )
+        ciphertext_len = struct.unpack(
+            ">Q", header_bytes[length_offset:length_offset + FrameLayout.LENGTH_LEN]
+        )[0]
+
+        # 7. Извлекаем полный фрейм (заголовок + ciphertext).
+        full_frame_size = header_size + ciphertext_len
+        full_frame_bits = full_frame_size * 8
+
+        if pool.size < full_frame_bits:
+            raise CompatibilityError(
+                f"Стего-контейнер не содержит полный фрейм: "
+                f"нужно {full_frame_bits} бит, доступно {pool.size}."
+            )
+
+        coords_full = spreader.generate(
+            container=stego, payload_size=full_frame_size
+        )
+        full_frame = processor.extract(stego, coords_full, full_frame_size)
+
+        # 8. Расшифровка.
+        try:
+            payload_bytes = self._crypto.decrypt(full_frame, request.passphrase)
+        except Exception as e:
+            raise RuntimeError(f"Расшифровка провалилась: неверный пароль или повреждённые данные. ({e})") from e
+
+        # 9. Запись извлечённого payload в файл.
+        Path(request.output_path).write_bytes(payload_bytes)
+
+        elapsed = time.perf_counter() - t0
+        return StegoResponse(
+            success=True,
+            output_path=request.output_path,
+            metrics={"time": elapsed, "extracted_bytes": len(payload_bytes)},
+        )
+    
+    def identify_format(self, path: Path) -> str:
+        """Определяет формат файла по Magic Bytes.
+
+        Публичная обёртка над FormatIdentifier для GUI.
+        GUI не должен импортировать core напрямую.
+
+        Returns:
+            "PNG" | "WAV" | "JPEG"
+
+        Raises:
+            ValueError: если формат не поддержан.
+        """
+        return self._identifier.identify(path)
+    
+    def get_algorithm_for_format(self, fmt: str) -> str:
+        """Возвращает имя алгоритма для формата ('LSB' / 'DCT')."""
+        return _FORMAT_TO_PROCESSOR.get(fmt, "?")
 
     def _build_pool(self, processor_kind: str, container: Any) -> tuple[np.ndarray, Any]:
         """Удивитесь, но БИЛДИТ ПУЛ. А если серьезно -
