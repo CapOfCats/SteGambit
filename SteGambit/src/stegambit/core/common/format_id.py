@@ -13,6 +13,10 @@ class FormatIdentifier:
 
     _READ_BYTES = 12 # договоренность насчет длины nonce
 
+    def _validate_riff_subtype(self, header: bytes) -> bool:
+        """RIFF — контейнер-обёртка. Проверяем, что внутри WAVE, а не AVI/WebP."""
+        return header[8:12] == b"WAVE"
+
     def identify(self, file_path: Path) -> str:
         """Читает заголовок файла и возвращает 'PNG' | 'WAV' | 'JPEG'.
 
@@ -26,8 +30,11 @@ class FormatIdentifier:
         for magic, fmt in _SIGNATURES:
             if header.startswith(magic):
                 # Для RIFF нужна доп. проверка, что это именно WAVE, а не AVI и т.п.
-                if fmt == "WAV" and header[8:12] != b"WAVE":
+                if fmt == "WAV" and self._validate_riff_subtype(header):
                     continue
                 return fmt
 
         raise ValueError(f"Unsupported or unknown format: {file_path.name}")
+    
+
+    
