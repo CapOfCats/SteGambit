@@ -14,6 +14,7 @@ dependencies = [
     "Pillow>=10.0.0",
     "imageio>=2.31.0",
     "jpeglib>=1.0.0",
+    "scikit-image>=0.21.0"
 ]
 
 [project.optional-dependencies]

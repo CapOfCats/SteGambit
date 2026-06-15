@@ -73,9 +73,13 @@ class SmartSpreader(ISpreader):
             pool = pool[~np.isin(pool, excl)]
 
         if pool.size < payload_bits_len:
+            shortage_bytes = (payload_bits_len - pool.size) // 8
             raise ValueError(
-                f"Недостаточно 'шумных' координат: нужно {payload_bits_len}, "
-                f"доступно {pool.size}. Снизить порог или взять другой контейнер."
+                f"Недостаточно ёмкости носителя для скрытия данных.\n"
+                f"Требуется: {payload_bits_len:,} бит ({payload_bits_len // 8:,} байт)\n"
+                f"Доступно:  {pool.size:,} бит ({pool.size // 8:,} байт)\n"
+                f"Не хватает примерно {shortage_bytes:,} байт.\n"
+                f"Возьмите контейнер большего размера или payload меньшего размера."
             )
 
         rng = self._seed_rng(password_seed) # перемешивает пул в соответствии с seed-фразой

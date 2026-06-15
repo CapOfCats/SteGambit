@@ -1,6 +1,6 @@
 import sys
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout,
+    QMainWindow, QMessageBox, QWidget, QVBoxLayout,
     QTabWidget, QPushButton, QStatusBar,
     QHBoxLayout, QLabel
 )
@@ -11,12 +11,22 @@ from PyQt6.QtGui import QIcon
 from stegambit.models.dto import StegoTaskRequest
 from stegambit.services.async_worker import StegoWorker
 from stegambit.services.stego_service import StegoService
+from stegambit.models.dto import (
+    StegoTaskRequest, StegoResponse, CapacityReport, QualityStatus
+)
+from stegambit.services.stego_service import CompatibilityError
+from .widgets.metrics_panel import MetricsData
 from .widgets.encode_panel import EncodePanel
 from .widgets.decode_panel import DecodePanel
 from .widgets.metrics_panel import MetricsPanel
 from .dialogs.encode_dialog import EncodeDialog, EncodeDialogResult
 from .dialogs.settings_dialog import SettingsDialog, AppSettings
 
+_CAPACITY_ERROR_MARKERS = (
+        "Недостаточно ёмкости",
+        "Требуется:",
+        "Доступно:",
+    )
 
 class MainWindow(QMainWindow):
     """
@@ -111,6 +121,7 @@ class MainWindow(QMainWindow):
             self._set_status("Settings saved.")
 
     def _on_check_compatibility(self):
+        """Проверка совместимости через StegoService.analyze_capacity()."""
         cover = self.encode_panel.get_cover_path()
         payload = self.encode_panel.get_payload_path()
 
@@ -120,44 +131,60 @@ class MainWindow(QMainWindow):
 
         self._set_status("Checking compatibility...")
 
+        request = StegoTaskRequest(
+            carrier_path=cover,
+            payload_path=payload,
+            output_path=cover,
+            password="",  
+        )
+
         try:
-            fmt = self._service.identify_format(cover)
-            algo = self._service.get_algorithm_for_format(fmt)
-
-            cover_mb = cover.stat().st_size / (1024 * 1024)
-            payload_kb = payload.stat().st_size / 1024
-
-            with open(cover, "rb") as f:
-                magic_raw = f.read(8).hex(" ").upper()
-
-            self.encode_panel.set_compatibility_result(
-                f"Format Identity: {fmt}  (Magic: {magic_raw})\n"
-                f"Algorithm Selected: {algo}\n"
-                f"Container Size: {cover_mb:.2f} MB\n"
-                f"Payload Size: {payload_kb:.1f} KB\n"
-                f"Estimation: [Capacity check — TODO #17]"
-            )
-            self.encode_panel.set_hide_enabled(True)
-            self._set_status(f"Compatibility check passed. Format: {fmt} → {algo}. Ready to hide.")
-
-        except ValueError as e:
-            self.encode_panel.set_compatibility_result(
-                f"⚠ Format not supported:\n{e}\n\nSupported: PNG, WAV, JPEG"
-            )
+            report: CapacityReport = self._service.analyze_capacity(request)
+        except CompatibilityError as e:
+            self.encode_panel.set_compatibility_result(f"⚠ Format not supported:\n{e}")
             self.encode_panel.set_hide_enabled(False)
             self._set_status(f"Compatibility check failed: {e}")
-
+            return
         except FileNotFoundError:
             self.encode_panel.set_compatibility_result("⚠ File not found. Check the path.")
             self.encode_panel.set_hide_enabled(False)
             self._set_status("File not found.")
-
+            return
         except Exception as e:
             self.encode_panel.set_compatibility_result(
                 f"⚠ Unexpected error:\n{type(e).__name__}: {e}"
             )
             self.encode_panel.set_hide_enabled(False)
             self._set_status(f"Error: {type(e).__name__}")
+            return
+
+        status_line = (
+            "FITS — ready to hide" if report.fits
+            else "TOO LARGE — choose bigger carrier or smaller payload"
+        )
+        text = (
+            f"Format: {report.format}  |  Algorithm: {report.algorithm}\n"
+            f"Container capacity: {report.capacity_bits:,} bits\n"
+            f"Required for payload: {report.required_bits:,} bits "
+            f"({report.utilization_percent:.1f}%)\n"
+            f"Payload size: {report.payload_size_bytes:,} bytes  |  "
+            f"Crypto overhead: {report.header_size_bytes} bytes\n"
+            f"Status: {status_line}"
+        )
+        self.encode_panel.set_compatibility_result(text)
+        self.encode_panel.set_hide_enabled(report.fits)
+
+        if report.fits:
+            self._set_status(
+                f"Compatibility check passed. "
+                f"Format: {report.format} → {report.algorithm}. "
+                f"Utilization: {report.utilization_percent:.1f}%. Ready to hide."
+            )
+        else:
+            self._set_status(
+                f"Capacity insufficient: need {report.required_bits:,} bits, "
+                f"available {report.capacity_bits:,}."
+            )
 
     def _on_hide_requested(self):
         """Открывает EncodeDialog для ввода пароля и пути."""
@@ -195,30 +222,82 @@ class MainWindow(QMainWindow):
             password=result.password,
         )
 
-        # Хранится в self, чтобы воркер не был собран сборщиком мусора
-        # до доставки сигналов (важно при будущей миграции на QThread).
         self._worker = StegoWorker(request, mode="encode")
         self._worker.finished.connect(self._on_encode_finished)
         self._worker.error.connect(self._on_worker_error)
         self._worker.start()
     
+    def _apply_status_color(self, status: QualityStatus):
+        """Окрашивает статус-бар по QualityStatus.
+
+        OK      → зелёный фон
+        WARNING → жёлтый фон
+        ANOMALY → красный фон
+        """
+        color_map = {
+            QualityStatus.OK:      "background-color: #1a2a1a; color: #4aaa4a;",
+            QualityStatus.WARNING: "background-color: #2a2a1a; color: #aaaa4a;",
+            QualityStatus.ANOMALY: "background-color: #2a1a1a; color: #aa4a4a;",
+        }
+        style = color_map.get(status, "")
+        self.status_bar.setStyleSheet(style)
+
 
     def _on_encode_finished(self, response):
-        """Обработчик результата Encode."""
-        if response.success:
-            self.encode_panel.set_progress(100, "Done.")
-            metrics_text = ""
-            if response.metrics:
-                psnr = response.metrics.get("psnr")
-                t = response.metrics.get("time")
-                if psnr is not None:
-                    metrics_text += f"PSNR: {psnr:.1f} dB  "
-                if t is not None:
-                    metrics_text += f"Time: {t:.2f}s"
-            self._set_status(f"Готово. {metrics_text}")
-        else:
+        """Обработчик результата Encode.
+
+        MetricsData собирается здесь и передаётся в MetricsPanel.
+        """
+        if not response.success:
             self.encode_panel.reset_progress()
             self._set_status(f"Ошибка: {response.error}")
+            return
+
+        self.encode_panel.set_progress(100, "Done.")
+        metrics = response.metrics or {}
+
+        psnr = metrics.get("psnr")  
+        ssim = metrics.get("ssim")            
+        time_sec = metrics.get("time", 0.0)
+        size_deviation = metrics.get("size_deviation", 0.0)
+        quality_status = metrics.get("quality_status", QualityStatus.OK)
+
+        if isinstance(quality_status, str):
+            quality_status = QualityStatus(quality_status)
+
+        cover   = self.encode_panel.get_cover_path()
+        output  = response.output_path
+
+        carrier_mb = cover.stat().st_size / (1024 * 1024) if cover else 0.0
+        result_mb  = output.stat().st_size / (1024 * 1024) if output and output.exists() else 0.0
+
+        data = MetricsData(
+            psnr=psnr,
+            ssim=ssim,
+            time_sec=time_sec,
+            size_deviation_pct=size_deviation,
+            quality_status=quality_status,
+            algorithm=metrics.get("algorithm", "—"),
+            carrier_size_mb=carrier_mb,
+            result_size_mb=result_mb,
+            original_path=cover,
+            result_path=output,
+            success=True,
+            format_id=metrics.get("format_id", "—"),
+            integrity_ok=True,
+        )
+
+        self.metrics_panel.show_results(data)
+
+        self._apply_status_color(quality_status)
+
+        parts = [f"Time: {time_sec:.2f}s"]
+        if psnr is not None:
+            parts.append(f"PSNR: {psnr:.1f} dB")
+        if ssim is not None:
+            parts.append(f"SSIM: {ssim:.4f}")
+        parts.append(f"Size Δ: {size_deviation:+.1f}%")
+        self._set_status(f"Done. {' | '.join(parts)}")
 
     def _on_extract_requested(self):
         """Запуск Decode через StegoWorker."""
@@ -272,9 +351,72 @@ class MainWindow(QMainWindow):
     
     
     def _on_worker_error(self, message: str):
-        """Обработчик неожиданных ошибок воркера."""
+        """Обработчик неожиданных ошибок воркера.
+           Ошибки нехватки ёмкости выводятся отдельным попапом.
+        """
         self.encode_panel.reset_progress()
-        self._set_status(f"Critical: {message}")
+
+        if self._is_capacity_error(message):
+            self._show_capacity_error_dialog(message)
+            self._set_status("⚠ Not enough capacity — see dialog for details.")
+        else:
+            self._set_status(f"Critical: {message}")
+
+
+    def _is_capacity_error(self, message: str) -> bool:
+        """Определяет, является ли сообщение ошибкой нехватки ёмкости."""
+        return any(marker in message for marker in self._CAPACITY_ERROR_MARKERS)
+    
+
+    def _show_capacity_error_dialog(self, message: str):
+        """Показывает попап с деталями ошибки ёмкости и советом."""
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("SteGambit — Capacity Error")
+        dlg.setIcon(QMessageBox.Icon.Warning)
+
+        dlg.setText(
+            "Контейнеру не достаёт емкости для сокрытия выбранного файла."
+        )
+        dlg.setInformativeText(
+            "В контейнере не хватает достаточного кол-ва 'шумных' пикселей "
+            "для граничного распределения (порога незаметности).\n\n"
+            "Что делать?:\n"
+            "  • Другой 'носитель', желательно - потяжелее\n"
+            "  • Уменьшить скрываемую нагрузку \n"
+        )
+
+        dlg.setDetailedText(message)
+
+        dlg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        dlg.setDefaultButton(QMessageBox.StandardButton.Ok)
+
+        dlg.setStyleSheet("""
+            QMessageBox {
+                background-color: #1e1e1e;
+                color: #d4d4d4;
+            }
+            QMessageBox QLabel {
+                color: #d4d4d4;
+            }
+            QPushButton {
+                background-color: #2a2a2a;
+                color: #d4d4d4;
+                border: 1px solid #4a4a4a;
+                padding: 4px 16px;
+                min-width: 60px;
+            }
+            QPushButton:hover {
+                background-color: #3a3a3a;
+                border-color: #6a6a6a;
+            }
+            QTextEdit {
+                background-color: #141414;
+                color: #888888;
+                border: 1px solid #3a3a3a;
+            }
+        """)
+
+        dlg.exec()
 
 
     def _set_status(self, message: str):
