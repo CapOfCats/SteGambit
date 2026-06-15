@@ -252,13 +252,15 @@ class MainWindow(QMainWindow):
         self._worker.start()
 
     def _on_decode_finished(self, response):
-        """Обработчик результата Decode."""
         if response.success:
-            t = response.metrics.get("time", 0) if response.metrics else 0
-            size = response.metrics.get("extracted_bytes", 0) if response.metrics else 0
+            metrics = response.metrics or {}
+            t = metrics.get("time", 0)
+            size = metrics.get("extracted_bytes", 0)
+            fmt = metrics.get("detected_format", "UNKNOWN")
             self.decode_panel.set_log(
                 f"Извлечение успешно!\n"
                 f"Saved to: {response.output_path}\n"
+                f"Detected format: {fmt}\n"
                 f"Size: {size} bytes\n"
                 f"Time: {t:.2f}s\n"
                 f"Data Integrity: !!! Valid (AES-GCM tag verified)"

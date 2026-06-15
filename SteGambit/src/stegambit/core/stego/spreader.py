@@ -21,11 +21,12 @@ class SmartSpreader(ISpreader):
         """Возвращает 2D-массив (H,W) яркости или исходный 1D для аудио.
         Нужно для выявления шума, предварительно конвертировав изображение в черно-белое.
         Для этого используются коэффициенты стандарта ITU-R BT.601"""
-        if container.ndim == 3:
-            return (0.299 * container[..., 0] + # чувствительность к красному спектру
-                    0.587 * container[..., 1] + # к зеленому
-                    0.114 * container[..., 2]).astype(np.int16) # к синему
-        return container.astype(np.int16)
+        masked = container & ~np.array(1, dtype=container.dtype) # Это защита от shrinkage, чтобы граничные значения не потерлись в дешифровке
+        if masked.ndim == 3:
+            return (0.299 * masked[..., 0] + # чувствительность к красному спектру
+                    0.587 * masked[..., 1] + # к зеленому
+                    0.114 * masked[..., 2]).astype(np.int16) # к синему
+        return masked.astype(np.int16)
 
     def _build_edge_pool(self, container: np.ndarray) -> np.ndarray:
         """Формирует массив flat-индексов в container.flat, прошедших порог."""

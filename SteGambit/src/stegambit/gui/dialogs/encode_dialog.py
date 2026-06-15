@@ -164,7 +164,7 @@ class EncodeDialog(QDialog):
     def _browse_output(self):
         path, _ = QFileDialog.getSaveFileName(
             self, "Save Stego File", "",
-            "PNG (*.png);;WAV (*.wav);;All files (*)"
+            "PNG (*.png);;WAV (*.wav);;JPEG (*.jpg);;All files (*)"
         )
         if path:
             self.edit_output.setText(path)

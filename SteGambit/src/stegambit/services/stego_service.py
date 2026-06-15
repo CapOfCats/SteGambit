@@ -1,5 +1,5 @@
 """StegoService — главный Фасад пайплайна сокрытия."""
-
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -7,7 +7,7 @@ import numpy as np
 import struct
 import time
 
-from stegambit.core.common.format_id import FormatIdentifier
+from stegambit.core.common.format_id import FormatIdentifier, get_default_extension
 from stegambit.core.formats.jpeg import JpegFormat, JpegContainer
 from stegambit.core.formats.png import PngFormat
 from stegambit.core.formats.wav import WavFormat
@@ -73,7 +73,7 @@ class StegoService:
 
         # 3. Чтение и шифровка "груза".
         payload_bytes = Path(request.payload_path).read_bytes()
-        encrypted = self._crypto.encrypt(payload_bytes, request.passphrase)
+        encrypted = self._crypto.encrypt(payload_bytes, request.password)
 
         # 4. Выбор процессора и сборка пула координат.
         #    Для LSB пул — все индексы контейнера. Для DCT — только валидные
@@ -82,29 +82,47 @@ class StegoService:
         processor_kind = _FORMAT_TO_PROCESSOR[carrier_fmt]
         pool, processor = self._build_pool(processor_kind, original)
 
-        # 5. Ёмкостная валидация (критично для JPEG, тривиально для LSB).
+        # 5. Ёмкостная валидация (критично для JPEG, не критично для LSB).
         required_bits = len(encrypted) * 8
         if pool.size < required_bits:
             raise CompatibilityError(
                 f"Недостаточно ёмкости носителя: доступно {pool.size} бит, "
-                f"требуется {required_bits}. Возьмите более крупный носитель "
-                f"или уменьшите payload."
+                f"требуется {required_bits}. Возьмите более крупный носитель или уменьшите payload."
             )
 
         # 6. Генерация координат. Spreader выбирает конкретные позиции из пула по сиду.
-        spreader = SmartSpreader(passphrase=request.passphrase)
-        coords = spreader.generate(container=original, payload_size=len(encrypted))
+        if processor_kind == "LSB":
+            spreader = SmartSpreader()
+            coords = spreader.generate_coords(
+                container=original,
+                payload_bits_len=required_bits,
+                password_seed=request.password,
+            )
+        else:
+            # Для JPEG пул — уже отфильтрованные DCT-позиции. Перемешиваем детерминированно по паролю.
+            coords = self._shuffle_pool_by_password(pool, request.password)[:required_bits]
+
+        # Снапшот для sanity-check (только DCT — для LSB sanity на PSNR=inf).
+        pre_embed_snapshot = None
+        if processor_kind == "DCT":
+            pre_embed_snapshot = original.coef_arrays[0].copy()
 
         # 7. Внедрение.
         stego = processor.embed(original, encrypted, coords)
 
-        # 8. Метрики + sanity-check.
-        #    PSNR осмыслен только для ndarray-контейнеров (LSB).
-        #    Для DCT делаем проверку, что Y-канал реально изменился.
-        metrics = self._compute_metrics(processor_kind, original, stego, t0)
+        if processor_kind == "DCT":
+            print(f"DEBUG hide: pool size = {pool.size}")
+            print(f"DEBUG hide: coords[:10] = {coords[:10]}")
+            print(f"DEBUG hide: encrypted[:8].hex() = {encrypted[:8].hex()}")
 
-        # 9. Сохраняем.
+        # 8. Сохраняем.
         fmt_handler.save(stego, request.output_path)
+
+        # 9. Метрики + sanity-check.
+        metrics = self._compute_metrics(
+            processor_kind, original, stego, t0,
+            pre_embed_snapshot=pre_embed_snapshot,
+        )
 
         return StegoResponse(success=True, metrics=metrics)
     
@@ -156,14 +174,16 @@ class StegoService:
             )
 
         # Spreader с тем же паролем даст те же координаты, что при embed.
-        spreader = SmartSpreader(passphrase=request.passphrase)
+        if processor_kind == "LSB":
+            spreader = SmartSpreader()
+            coords_for_header = spreader.generate_coords(
+                container=stego,
+                payload_bits_len=header_bits,
+                password_seed=request.password,
+            )
+        else:
+            coords_for_header = self._shuffle_pool_by_password(pool, request.password)[:header_bits]
 
-        # 5. Извлекаем достаточно бит для парсинга длины.
-        #    Сначала тянем минимально нужное (заголовок), читаем LENGTH,
-        #    потом тянем полный фрейм.
-        coords_for_header = spreader.generate(
-            container=stego, payload_size=header_size
-        )
         header_bytes = processor.extract(stego, coords_for_header, header_size)
 
         # 6. Парсим LENGTH из заголовка (поле смещено на MAGIC+FLAGS+SALT+NONCE).
@@ -173,8 +193,7 @@ class StegoService:
 
         if header_bytes[:FrameLayout.MAGIC_LEN] != FrameLayout.MAGIC:
             raise RuntimeError(
-                "MAGIC bytes не найдены. Возможно, неверный пароль "
-                "или файл не содержит данных."
+                "MAGIC bytes не найдены. Возможно, неверный пароль или файл не содержит данных."
             )
 
         length_offset = (
@@ -197,25 +216,47 @@ class StegoService:
                 f"нужно {full_frame_bits} бит, доступно {pool.size}."
             )
 
-        coords_full = spreader.generate(
-            container=stego, payload_size=full_frame_size
-        )
+        if processor_kind == "LSB":
+            spreader = SmartSpreader()
+            coords_full = spreader.generate_coords(
+                container=stego,
+                payload_bits_len=full_frame_bits,
+                password_seed=request.password,
+            )
+        else:
+            coords_full = self._shuffle_pool_by_password(pool, request.password)[:full_frame_bits]
+
         full_frame = processor.extract(stego, coords_full, full_frame_size)
 
-        # 8. Расшифровка.
+        # 8. Запись извлечённого payload в файл.
         try:
-            payload_bytes = self._crypto.decrypt(full_frame, request.passphrase)
+            payload_bytes = self._crypto.decrypt(full_frame, request.password)
         except Exception as e:
-            raise RuntimeError(f"Расшифровка провалилась: неверный пароль или повреждённые данные. ({e})") from e
+            raise RuntimeError(
+                f"Расшифровка провалилась: неверный пароль или повреждённые данные ({e})."
+            ) from e
 
-        # 9. Запись извлечённого payload в файл.
-        Path(request.output_path).write_bytes(payload_bytes)
+        # Пытаемся определить оригинальный формат payload по magic bytes, чтобы вернуть файл с правильным расширением.
+        # Если формат не опознан (текст, неподдерживаемый бинарь) — дефолтуется .bin.
+        try:
+            payload_fmt = self._identifier.identify_bytes(payload_bytes)
+        except ValueError:
+            payload_fmt = "UNKNOWN"
+
+        correct_ext = get_default_extension(payload_fmt)
+        output_path = Path(request.output_path).with_suffix(correct_ext)
+
+        output_path.write_bytes(payload_bytes)
 
         elapsed = time.perf_counter() - t0
         return StegoResponse(
             success=True,
-            output_path=request.output_path,
-            metrics={"time": elapsed, "extracted_bytes": len(payload_bytes)},
+            output_path=output_path,
+            metrics={
+                "time": elapsed,
+                "extracted_bytes": len(payload_bytes),
+                "detected_format": payload_fmt,
+            },
         )
     
     def identify_format(self, path: Path) -> str:
@@ -252,7 +293,8 @@ class StegoService:
             return pool, self._dct
         raise RuntimeError(f"Неизвестный тип процессора: {processor_kind}")
 
-    def _compute_metrics(self, processor_kind: str, original: Any, stego: Any, t0: float) -> dict:
+    def _compute_metrics(self, processor_kind: str, original: Any, stego: Any,
+                         t0: float, pre_embed_snapshot: np.ndarray | None = None) -> dict:
         """Считает метрики и выполняет sanity-check.
 
         LSB: PSNR между двумя ndarray. inf → ни один бит не записался - плохо!
@@ -271,15 +313,47 @@ class StegoService:
             return {"psnr": psnr, "time": elapsed}
 
         if processor_kind == "DCT":
-            assert isinstance(original, JpegContainer)
             assert isinstance(stego, JpegContainer)
-            if np.array_equal(original.coef_arrays[0], stego.coef_arrays[0]):
+            if pre_embed_snapshot is None:
                 raise RuntimeError(
-                    "Проверка внедрения провалена: Y-канал JPEG не изменился. "
-                    "Информация не была внедрена."
+                    "DCT sanity-check требует наличия pre_embed_snapshot. Баг в hide_data — снапшот не передан."
+                )
+            if np.array_equal(pre_embed_snapshot, stego.coef_arrays[0]):
+                raise RuntimeError(
+                    "Проверка внедрения провалена: Y-канал JPEG не изменился. Информация не была внедрена."
                 )
             return {"time": elapsed}
 
         return {"time": elapsed}
+    
+
+    @staticmethod
+    def _shuffle_pool_by_password(pool: np.ndarray, password: str) -> np.ndarray:
+        """Детерминированно перемешивает пул координат seed'ом из пароля.
+
+        Используется для DCT-пайплайна, где SmartSpreader неприменим
+        (edge-detection — это пространственный анализ, бессмысленный
+        для DCT-коэффициентов в частотном домене).
+
+        TODO [#XX рефакторинг spreading]:
+            Этот метод дублирует логику SmartSpreader._seed_rng + rng.shuffle.
+            План:
+                1. Вынести seed-perestановку в отдельный класс
+                   PasswordSeededShuffler в core/stego/.
+                2. SmartSpreader = EdgeDetector + Shuffler (композиция).
+                3. Для DCT — DctSpreader = Shuffler (без edge-detection),
+                   входной пул берётся из DctProcessor.get_embeddable_positions().
+                4. StegoService перестаёт знать про шифровку seed'а — это
+                   ответственность core/stego, а не сервисного слоя.
+
+            Сейчас оставлено как есть ради скорости MVP. При рефакторинге
+            этот метод УДАЛИТЬ полностью, перенеся логику в Shuffler.
+        """
+        digest = hashlib.sha256(password.encode("utf-8")).digest()
+        seed_int = int.from_bytes(digest[:8], "big", signed=False)
+        rng = np.random.default_rng(seed_int)
+        pool_copy = pool.copy()
+        rng.shuffle(pool_copy)
+        return pool_copy
     
     # TODO: На проде убрать ассерты!11! 

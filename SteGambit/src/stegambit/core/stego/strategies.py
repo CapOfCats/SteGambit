@@ -82,7 +82,7 @@ class DctProcessor(IStegoProcessor[JpegContainer]):
         !! Модификация — LSB квантованного коэффициента.
     """
 
-    _EXCLUDED_VALUES = frozenset({0, 1, -1})
+    _EXCLUDED_VALUES = frozenset({-2, -1, 0, 1})
 
     def get_embeddable_positions(self, container: JpegContainer) -> np.ndarray:
         """Строит пул flat-индексов валидных для встраивания коэффициентов.
