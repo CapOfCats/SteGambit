@@ -1,7 +1,7 @@
 """StegoService — главный Фасад пайплайна сокрытия."""
 import hashlib
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 import struct
@@ -14,8 +14,18 @@ from stegambit.core.formats.wav import WavFormat
 from stegambit.core.stego.strategies import DctProcessor, LsbProcessor
 from stegambit.core.crypto.engine import CryptoEngine, FrameLayout
 from stegambit.core.stego.spreader import SmartSpreader
-from stegambit.models.dto import StegoTaskRequest, StegoResponse
-from stegambit.services.analytics.metrics import calculate_psnr
+from stegambit.models.dto import (
+    StegoTaskRequest,
+    StegoResponse,
+    CapacityReport,
+    QualityStatus,
+)
+from stegambit.services.analytics.metrics import (
+    calculate_psnr,
+    calculate_ssim,
+    calculate_size_deviation,
+    evaluate_quality,
+)
 
 _FORMAT_REGISTRY = {
     "PNG": PngFormat,
@@ -122,9 +132,15 @@ class StegoService:
         metrics = self._compute_metrics(
             processor_kind, original, stego, t0,
             pre_embed_snapshot=pre_embed_snapshot,
+            original_path=request.carrier_path,
+            output_path=request.output_path,
         )
 
-        return StegoResponse(success=True, metrics=metrics)
+        return StegoResponse(
+            success=True,
+            output_path=request.output_path,
+            metrics=metrics,
+        )
     
     def extract_data(self, request: StegoTaskRequest) -> StegoResponse:
         """Извлекает payload из стего-контейнера.
@@ -273,6 +289,67 @@ class StegoService:
         """
         return self._identifier.identify(path)
     
+
+    def analyze_capacity(self, request: StegoTaskRequest) -> CapacityReport:
+        """Предварительная оценка ёмкости БЕЗ фактического сокрытия.
+
+        Используется UI до запуска операции, чтобы показать пользователю
+        реальные цифры и при необходимости заблокировать кнопку Hide.
+
+        Шаги:
+            1. Определить формат контейнера (Magic Bytes).
+            2. Загрузить контейнер.
+            3. Построить пул координат тем же способом, что hide_data
+               (для LSB — все пиксели, для DCT — отфильтрованные AC).
+            4. Посчитать и сравнить с размером payload.
+
+        Returns:
+            CapacityReport с флагом fits.
+
+        Raises:
+            CompatibilityError: если формат не поддержан.
+            FileNotFoundError:  если файлы не существуют.
+        """
+        carrier_fmt = self._identifier.identify(request.carrier_path)
+        if carrier_fmt not in _FORMAT_REGISTRY:
+            raise CompatibilityError(
+                f"Формат '{carrier_fmt}' не поддержан. "
+                f"Поддержанные: {list(_FORMAT_REGISTRY)}"
+            )
+
+        fmt_handler = _FORMAT_REGISTRY[carrier_fmt]()
+        container = fmt_handler.load(request.carrier_path)
+
+        processor_kind = _FORMAT_TO_PROCESSOR[carrier_fmt]
+        if processor_kind == "LSB":
+            spreader = SmartSpreader()
+            capacity_bits = spreader.get_max_capacity_bits(container)
+        else:  # DCT
+            pool = self._dct.get_embeddable_positions(container)
+            capacity_bits = int(pool.size)
+
+        payload_size = Path(request.payload_path).stat().st_size
+        header_size = CryptoEngine.header_size()
+        # Crypto-frame = header (57 байт) + ciphertext (= payload + GCM-tag).
+        # GCM-tag уже включён в header_size согласно нашему FrameLayout,
+        # поэтому считаем как header + payload в битах.
+        required_bits = (header_size + payload_size) * 8
+
+        utilization = (
+            (required_bits / capacity_bits * 100.0) if capacity_bits > 0 else 0.0
+        )
+
+        return CapacityReport(
+            fits=required_bits <= capacity_bits,
+            format=carrier_fmt,
+            algorithm=processor_kind,
+            capacity_bits=capacity_bits,
+            required_bits=required_bits,
+            payload_size_bytes=payload_size,
+            header_size_bytes=header_size,
+            utilization_percent=utilization,
+        )
+    
     def get_algorithm_for_format(self, fmt: str) -> str:
         """Возвращает имя алгоритма для формата ('LSB' / 'DCT')."""
         return _FORMAT_TO_PROCESSOR.get(fmt, "?")
@@ -293,16 +370,34 @@ class StegoService:
             return pool, self._dct
         raise RuntimeError(f"Неизвестный тип процессора: {processor_kind}")
 
-    def _compute_metrics(self, processor_kind: str, original: Any, stego: Any,
-                         t0: float, pre_embed_snapshot: np.ndarray | None = None) -> dict:
+
+    def _compute_metrics(
+        self,
+        processor_kind: str,
+        original: Any,
+        stego: Any,
+        t0: float,
+        pre_embed_snapshot: np.ndarray | None = None,
+        original_path: Path | None = None,
+        output_path: Path | None = None,
+    ) -> dict:
         """Считает метрики и выполняет sanity-check.
 
-        LSB: PSNR между двумя ndarray. inf → ни один бит не записался - плохо!
-        DCT: PSNR на коэффициентах не имеет визуального смысла, считаем
-             только время и проверяем, что Y-канал реально изменился.
+        LSB: PSNR + SSIM между двумя ndarray. PSNR=inf -> ни один бит
+             не записался (sanity fail).
+        DCT: PSNR/SSIM на коэффициентах визуально не осмыслен, считаем
+             только время и проверяем, что Y-канал изменился.
+        Общее: size_deviation вычисляется при наличии путей,
+               quality_status — на основе доступных метрик.
+
+        Returns:
+            dict с ключами: psnr, ssim, time, size_deviation, quality_status - временно строками.
+            Часть ключей может отсутствовать в зависимости от пайплайна.
         """
         elapsed = time.perf_counter() - t0
+        metrics: dict[str, Any] = {"time": elapsed}
 
+        #  LSB-метрики - пиксельный домен 
         if processor_kind == "LSB":
             psnr = calculate_psnr(original, stego)
             if psnr == float("inf"):
@@ -310,21 +405,41 @@ class StegoService:
                     "Проверка внедрения провалена: стего-контейнер идентичен "
                     "исходному. Информация не была внедрена."
                 )
-            return {"psnr": psnr, "time": elapsed}
+            metrics["psnr"] = psnr
+            metrics["ssim"] = calculate_ssim(original, stego)
 
-        if processor_kind == "DCT":
+        #  DCT sanity-check - без PSNR/SSIM 
+        elif processor_kind == "DCT":
             assert isinstance(stego, JpegContainer)
             if pre_embed_snapshot is None:
                 raise RuntimeError(
-                    "DCT sanity-check требует наличия pre_embed_snapshot. Баг в hide_data — снапшот не передан."
+                    "DCT sanity-check требует pre_embed_snapshot. "
+                    "Баг в hide_data — снапшот не передан."
                 )
             if np.array_equal(pre_embed_snapshot, stego.coef_arrays[0]):
                 raise RuntimeError(
-                    "Проверка внедрения провалена: Y-канал JPEG не изменился. Информация не была внедрена."
+                    "Проверка внедрения провалена: Y-канал JPEG не изменился. "
+                    "Информация не была внедрена."
                 )
-            return {"time": elapsed}
 
-        return {"time": elapsed}
+        #  Отклонение размера файла
+        # Считается ПОСЛЕ save(), поэтому пути ВСЕГДА должны быть переданы.
+        size_dev: Optional[float] = None
+        if original_path is not None and output_path is not None:
+            try:
+                size_dev = calculate_size_deviation(original_path, output_path)
+                metrics["size_deviation"] = size_dev
+            except (FileNotFoundError, OSError):
+                # Файл может быть не записан по ошибке ОС
+                pass
+
+        # Триггер качества
+        metrics["quality_status"] = evaluate_quality(
+            psnr=metrics.get("psnr"),
+            size_deviation=size_dev,
+        )
+
+        return metrics
     
 
     @staticmethod
