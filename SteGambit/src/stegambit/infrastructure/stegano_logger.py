@@ -1,69 +1,54 @@
+"""Настройка глобального логирования для SteGambit.
+
+Используется ядром (StegoService, CryptoEngine) и GUI (MainWindow, Worker)
+для записи важных событий и ошибок. Вывод дублируется в консоль и файл.
+"""
 import logging
-import time
-from datetime import datetime
+import sys
 from pathlib import Path
 
 
-class SteganoLogger:
+_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+_LOG_DATE_FORMAT = "%H:%M:%S"
+_DEFAULT_LOG_FILE = "stegambit.log"
+
+
+def setup_logging(
+    level: int = logging.INFO,
+    log_file: str | Path = _DEFAULT_LOG_FILE,
+) -> None:
+    """Инициализирует root-логгер: консоль + файл.
+
+    Вызывается один раз на старте приложения (в main.py).
+    Идемпотентна: повторный вызов не дублирует хендлеры.
+
+    Args:
+        level: Минимальный уровень логирования (logging.INFO/DEBUG/...).
+        log_file: Путь к файлу логов. Будет создан рядом с main.py.
     """
-    Класс для логирования происходящего в приложении.
-    Обеспечивает отслеживание метрик файлов, времени выполнения операций и пр.
-    """
+    root = logging.getLogger()
 
-    def __init__(self, log_window, log_dir: str = "logs", create_file: bool = False):
-        self.log_dir = Path(log_dir)
-        self.log_dir.mkdir(exist_ok=True)
+    # Защита от двойной инициализации (актуально при перезапусках в IDE).
+    if getattr(root, "_stegambit_configured", False):
+        return
 
-        log_file = self.log_dir / f"stegambit_{datetime.now().strftime('%Y-%m-%d')}.log"
+    root.setLevel(level)
+    formatter = logging.Formatter(_LOG_FORMAT, datefmt=_LOG_DATE_FORMAT)
 
-        self.logger = logging.getLogger("SteGambit")
-        self.logger.setLevel(logging.INFO)
+    # Консольный хендлер
+    console = logging.StreamHandler(sys.stdout)
+    console.setFormatter(formatter)
+    root.addHandler(console)
 
-        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', '%H:%M:%S')
+    # Файловый хендлер
+    file_handler = logging.FileHandler(log_file, mode="a", encoding="utf-8")
+    file_handler.setFormatter(formatter)
+    root.addHandler(file_handler)
 
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
-        file_handler.setFormatter(formatter)
+    root._stegambit_configured = True  # type: ignore[attr-defined]
+    logging.getLogger(__name__).info("Logging initialized")
 
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
 
-        self.logger.addHandler(file_handler)
-        self.logger.addHandler(console_handler)
-
-        self.logger.info("--- SteGambit Logger Initialized ---")
-
-    def log_operation_start(self, op_type, container_path):
-        """Регистрирует начало операции (внедрение или извлечение)"""
-        path = Path(container_path)
-        stats = path.stat()
-
-        self.logger.info(f"Начало операции: {op_type.upper()}")
-        self.logger.info(f"Файл-носитель: {path.name}")
-        self.logger.info(f"Расположение: {path.absolute()}")
-        self.logger.info(f"Формат: {path.suffix.upper()}")
-        self.logger.info(f"Размер контейнера: {self._format_size(stats.st_size)}")
-
-        return time.time()
-
-    def log_operation_end(self, start_time, secret_info=None):
-        """Регистрирует завершение операции и затраченное время"""
-        duration = time.time() - start_time
-
-        if secret_info:
-            self.logger.info(f"Объект: {secret_info.get('name', 'Unknown')}")
-            self.logger.info(f"Размер секрета: {self._format_size(secret_info.get('size', 0))}")
-
-        self.logger.info(f"Продолжительность: {duration:.4f} сек.")
-        self.logger.info("Операция успешно завершена.\n" + "-" * 40)
-
-    def log_error(self, error_msg):
-        """Регистрирует ошибки в процессе работы"""
-        self.logger.error(f"ОШИБКА: {error_msg}")
-
-    def _format_size(self, size_bytes):
-        """Вспомогательная функция для форматирования размера файлов"""
-        for unit in ['B', 'KB', 'MB', 'GB']:
-            if size_bytes < 1024:
-                return f"{size_bytes:.2f} {unit}"
-            size_bytes /= 1024
-        return f"{size_bytes:.2f} TB"
+def get_logger(name: str) -> logging.Logger:
+    """Получить именованный логгер. Просто обёртка для единообразия импортов."""
+    return logging.getLogger(name)

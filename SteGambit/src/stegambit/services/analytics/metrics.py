@@ -1,15 +1,30 @@
-"""Quality metrics for stego-containers."""
+"""Метрики качества контейнеров."""
 import numpy as np
 
 
 def calculate_psnr(original: np.ndarray, stego: np.ndarray) -> float:
-    """Peak Signal-to-Noise Ratio между оригиналом и stego-контейнером.
+    """Вычисляет Peak Signal-to-Noise Ratio между двумя контейнерами.
 
-    Возвращает float('inf'), если массивы идентичны (MSE == 0).
-    Предполагает 8-битный диапазон (MAX=255).
+    PSNR — стандартная метрика качества в lossless-стеганографии.
+    Чем выше PSNR, тем менее заметны искажения от встраивания payload.
+    Значения >40 dB считаются визуально неразличимыми.
+
+    Args:
+        original: Исходный контейнер до встраивания (np.ndarray, dtype=uint8).
+                  Для изображений shape=(H, W, C), для аудио shape=(N,) или (N, 2).
+        stego:    Контейнер после встраивания payload, той же формы и dtype.
+
+    Returns:
+        PSNR в децибелах (dB). float('inf') — если массивы идентичны
+        (MSE == 0, что означает нулевое искажение).
+
+    Raises:
+        ValueError: Если shape массивов не совпадает.
     """
     if original.shape != stego.shape:
-        raise ValueError("Shape mismatch between original and stego arrays")
+        raise ValueError(
+            f"Shape mismatch: original={original.shape}, stego={stego.shape}"
+        )
 
     diff = original.astype(np.float64) - stego.astype(np.float64)
     mse = np.mean(diff ** 2)

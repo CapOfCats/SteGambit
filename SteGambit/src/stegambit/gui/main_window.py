@@ -4,9 +4,13 @@ from PyQt6.QtWidgets import (
     QTabWidget, QPushButton, QStatusBar,
     QHBoxLayout, QLabel
 )
+from pathlib import Path
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
 
+from stegambit.models.dto import StegoTaskRequest
+from stegambit.services.async_worker import StegoWorker
+from stegambit.services.stego_service import StegoService
 from .widgets.encode_panel import EncodePanel
 from .widgets.decode_panel import DecodePanel
 from .widgets.metrics_panel import MetricsPanel
@@ -24,6 +28,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self._settings = AppSettings()
+        self._service = StegoService()
         self._setup_window()
         self._build_ui()
         self._connect_signals()
@@ -116,17 +121,14 @@ class MainWindow(QMainWindow):
         self._set_status("Checking compatibility...")
 
         try:
-            from stegambit.core.common.format_id import FormatIdentifier
-            fmt = FormatIdentifier().identify(cover)
+            fmt = self._service.identify_format(cover)
+            algo = self._service.get_algorithm_for_format(fmt)
 
             cover_mb = cover.stat().st_size / (1024 * 1024)
             payload_kb = payload.stat().st_size / 1024
 
             with open(cover, "rb") as f:
                 magic_raw = f.read(8).hex(" ").upper()
-
-            _algo_map = {"PNG": "LSB", "WAV": "LSB", "JPEG": "DCT"}
-            algo = _algo_map.get(fmt, "?")
 
             self.encode_panel.set_compatibility_result(
                 f"Format Identity: {fmt}  (Magic: {magic_raw})\n"
@@ -158,41 +160,121 @@ class MainWindow(QMainWindow):
             self._set_status(f"Error: {type(e).__name__}")
 
     def _on_hide_requested(self):
-        """
-        Открывает EncodeDialog для ввода пароля и пути.
-        TODO #17: после confirmed — передать в AsyncWorker.
-        """
+        """Открывает EncodeDialog для ввода пароля и пути."""
+        cover = self.encode_panel.get_cover_path()
+        if not cover:
+            self._set_status("Cover не выбран.")
+            return
+        try:
+            fmt = self._service.identify_format(cover)
+        except Exception:
+            fmt = "?"
+
         dlg = EncodeDialog(parent=self)
-        dlg.set_step1_valid(True, format_id="PNG")
+        dlg.set_step1_valid(True, format_id=fmt)
         dlg.confirmed.connect(self._on_encode_confirmed)
         dlg.exec()
 
 
     def _on_encode_confirmed(self, result: EncodeDialogResult):
-        """
-        TODO #17: здесь строим StegoTaskRequest и отправляем в AsyncWorker.
-        """
-        self._set_status(
-            f"Processing... | Output: {result.output_path.name}"
+        """Запуск Encode через StegoWorker."""
+        cover = self.encode_panel.get_cover_path()
+        payload = self.encode_panel.get_payload_path()
+
+        if not cover or not payload:
+            self._set_status("Cover/Payload не выбраны.")
+            return
+
+        self._set_status(f"Processing... | Output: {result.output_path.name}")
+        self.encode_panel.set_progress(50, "Spreading bits...")
+
+        request = StegoTaskRequest(
+            carrier_path=cover,
+            payload_path=payload,
+            output_path=result.output_path,
+            password=result.password,
         )
-        self.encode_panel.set_progress(70, "Spreading bits (PNG/LSB)...")
+
+        # Хранится в self, чтобы воркер не был собран сборщиком мусора
+        # до доставки сигналов (важно при будущей миграции на QThread).
+        self._worker = StegoWorker(request, mode="encode")
+        self._worker.finished.connect(self._on_encode_finished)
+        self._worker.error.connect(self._on_worker_error)
+        self._worker.start()
+    
+
+    def _on_encode_finished(self, response):
+        """Обработчик результата Encode."""
+        if response.success:
+            self.encode_panel.set_progress(100, "Done.")
+            metrics_text = ""
+            if response.metrics:
+                psnr = response.metrics.get("psnr")
+                t = response.metrics.get("time")
+                if psnr is not None:
+                    metrics_text += f"PSNR: {psnr:.1f} dB  "
+                if t is not None:
+                    metrics_text += f"Time: {t:.2f}s"
+            self._set_status(f"Готово. {metrics_text}")
+        else:
+            self.encode_panel.reset_progress()
+            self._set_status(f"Ошибка: {response.error}")
 
     def _on_extract_requested(self):
-        """
-        TODO #17: вызвать ExtractController.
-        """
+        """Запуск Decode через StegoWorker."""
         stego = self.decode_panel.get_stego_path()
+        output_dir = self.decode_panel.get_output_dir()
+        password = self.decode_panel.get_password()
+
         if not stego:
-            self._set_status("❌ Select stego file first.")
+            self._set_status("Stego-файл не выбран.")
             return
+        if not output_dir:
+            self._set_status("Папка для сохранения не выбрана.")
+            return
+        if not password:
+            self._set_status("Введите пароль.")
+            return
+
+        output_path = Path(output_dir) / f"extracted_{stego.stem}.bin"
         self._set_status("Extracting...")
-        self.decode_panel.set_log(
-            "Processing Metrics:\n"
-            "Decrypted DTO Format: Magic identified correctly.\n"
-            "Recovered Format: PNG\n"
-            "Data Integrity [✅ Valid CRC]\n"
-            "Extraction Time: 0.42 sec."
-        ) # заглушка - проверка вывода
+
+        request = StegoTaskRequest(
+            carrier_path=stego,
+            payload_path=stego,
+            output_path=output_path,
+            password=password,
+        )
+
+        self._worker = StegoWorker(request, mode="decode")
+        self._worker.finished.connect(self._on_decode_finished)
+        self._worker.error.connect(self._on_worker_error)
+        self._worker.start()
+
+    def _on_decode_finished(self, response):
+        if response.success:
+            metrics = response.metrics or {}
+            t = metrics.get("time", 0)
+            size = metrics.get("extracted_bytes", 0)
+            fmt = metrics.get("detected_format", "UNKNOWN")
+            self.decode_panel.set_log(
+                f"Извлечение успешно!\n"
+                f"Saved to: {response.output_path}\n"
+                f"Detected format: {fmt}\n"
+                f"Size: {size} bytes\n"
+                f"Time: {t:.2f}s\n"
+                f"Data Integrity: !!! Valid (AES-GCM tag verified)"
+            )
+            self._set_status(f"Извлечено в {response.output_path.name}")
+        else:
+            self.decode_panel.set_log(f"Ошибка: {response.error}")
+            self._set_status(f"Ошибка: {response.error}")
+    
+    
+    def _on_worker_error(self, message: str):
+        """Обработчик неожиданных ошибок воркера."""
+        self.encode_panel.reset_progress()
+        self._set_status(f"Critical: {message}")
 
 
     def _set_status(self, message: str):
