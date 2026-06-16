@@ -1,4 +1,4 @@
-"""Smoke-тесты для задачи #13: метрики качества и analyze_capacity.
+"""Смоки для метрик качества и analyze_capacity.
 
 Покрывают:
     * calculate_ssim — новая метрика структурного сходства.
@@ -6,8 +6,6 @@
     * evaluate_quality — триггеры качества OK/WARNING/ANOMALY.
     * StegoService.analyze_capacity — DTO CapacityReport.
     * Интеграция: hide_data возвращает все новые поля в metrics.
-
-PSNR уже покрыт неявно через crypto-тесты round-trip, отдельно не дублируем.
 """
 
 import numpy as np
