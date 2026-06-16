@@ -42,7 +42,7 @@ class _ParsedFrame:
     ciphertext: bytes
 
 
-class InvalidFrameError(Exception):
+class InvalidFrameError(RuntimeError):
     """Невалидный magic, повреждение заголовка или неверный пароль."""
     pass
 
