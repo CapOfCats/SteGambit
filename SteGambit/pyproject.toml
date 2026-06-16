@@ -21,6 +21,8 @@ dependencies = [
 dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1",
+    "pytest-html>=4.0",
     "black>=23.0.0",
     "isort>=5.12.0",
     "mypy>=1.5.0",
@@ -33,6 +35,26 @@ where = ["src"]
 testpaths = ["tests"]
 python_files = "test_*.py"
 pythonpath = ["src"]
+python_classes = "Test*"
+python_functions = "test_*"
+
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+    "--cov=src/stegambit/core",
+    "--cov=src/stegambit/services",
+    "--cov=src/stegambit/models",
+    "--cov-report=term-missing",
+    "--cov-report=html:docs/testing/coverage",
+    "--html=docs/testing/report.html",
+    "--self-contained-html",
+]
+
+markers = [
+    "smoke: критичные сценарии, прогоняются всегда",
+    "slow: тесты дольше 1 секунды",
+    "integration: тесты с реальным I/O и полным pipeline",
+]
 
 [project.gui-scripts]
 stegambit = "stegambit.gui.main_window:main"

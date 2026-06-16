@@ -29,7 +29,7 @@ class StegoResponse:
     """Результат операции"""
     success: bool
     output_path: Optional[Path] = None
-    metrics: Optional[Dict[str, float]] = None  # PSNR, время и т.д.
+    metrics: Optional[Dict[str, Any]] = None  # PSNR, время и т.д.
     error: Optional[str] = None
 
 
