@@ -157,6 +157,8 @@ class DctProcessor(IStegoProcessor[JpegContainer]):
         через LSB не меняет знак и не обнуляет оставшиеся значения, пул
         при extract восстанавливается идентично. Boom!1
         """
+        if lsb_depth != 1:
+            raise NotImplementedError("DCT: поддержан только lsb_depth=1")
         bits_needed = length * 8
         if coords.size < bits_needed:
             raise ValueError(
