@@ -1,12 +1,11 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QGroupBox, QGridLayout, QFrame,
-    QSizePolicy
+    QPushButton, QGroupBox, QGridLayout
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap
 from pathlib import Path
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from stegambit.models.dto import QualityStatus
@@ -218,6 +217,7 @@ class MetricsPanel(QWidget):
         self.lbl_time_val   = QLabel("Processing Time: —")
         self.lbl_dev_val    = QLabel("Size Deviation: —")
         self.lbl_carrier_val = QLabel("Total Carrier Size: —")
+        self.lbl_algorithm_val = QLabel("Algorithm: —")
 
         for i, lbl in enumerate([
             self.lbl_psnr_val,
@@ -225,6 +225,7 @@ class MetricsPanel(QWidget):
             self.lbl_time_val,
             self.lbl_dev_val,
             self.lbl_carrier_val,
+            self.lbl_algorithm_val,
         ]):
             metrics_grid.addWidget(lbl, i, 0)
 
@@ -269,26 +270,6 @@ class MetricsPanel(QWidget):
         Убрана старая _psnr_color(), теперь цвет берётся из бэкендового QualityStatus.
         """
         return _STATUS_COLOR.get(status, "#888888")
-
-
-    def _load_preview(self, label: QLabel, path: Optional[Path]):
-        if path and path.exists():
-            px = QPixmap(str(path)).scaled(
-                200, 150,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            label.setPixmap(px)
-        else:
-            label.setText("No preview")
-
-
-    def _psnr_color(self, psnr: float) -> str:
-        if psnr >= 50:
-            return "#4aaa4a"
-        elif psnr >= 40:
-            return "#aaaa4a"
-        return "#aa4a4a"
 
 
     def _load_preview(self, label: QLabel, path: Optional[Path]):
@@ -372,6 +353,8 @@ class MetricsPanel(QWidget):
         self.lbl_carrier_val.setText(
             f"Total Carrier Size: {data.carrier_size_mb:.1f} MB"
         )
+
+        self.lbl_algorithm_val.setText(f"Algorithm: {data.algorithm}")
 
         self.lbl_format_id.setText(
             f"Datatype Magic Bytes (Identity: {data.format_id})"
