@@ -1,71 +1,82 @@
-"""StegoWorker — слой совместимости между GUI и StegoService.
+"""StegoWorker — фоновый поток для тяжёлых операций StegoService.
 
-ВАЖНО в рамках (MVP):
-    Сейчас Worker работает СИНХРОННО — start() блокирует UI на время
-    операции. Это сознательное упрощение для MVP/защиты.
-    Контракт сигналов (finished/error) и метод start() уже соответствуют
-    будущему асинхронному API на QThread. При апгрейде до настоящих
-    потоков GUI-код менять не потребуется — только тело Worker'а.
+Архитектурная база: ADR 008 "Модель многопоточности и изоляция GUI".
 
-Зачем такой контракт уже сейчас:
-    - UI пишется один раз и не ломается при будущей миграции на QThread.
-    - Логика передачи DTO (Request -> Service -> Response) отлаживается
-      на синхронной версии, без рисков из-за гонок потоков.
+Контракт с GUI:
+    Сигналы:
+        - finished(StegoResponse) — операция завершилась.
+        - error(str) — инфраструктурная авария (исключение, не пойманное
+          бизнес-логикой). Используется для критических сбоев типа OOM, повреждённой инсталляции зависимостей и т.п.
+    Запуск: worker.start() — стандартный метод QThread, ставит поток
+      в очередь Qt event loop. Тело выполнится в методе run().
+
+    Базовый класс QObject -> QThread.
+    GUI не блокируется на время операции — главный event loop Qt продолжает обрабатывать события.
 """
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal
 
 from stegambit.infrastructure.stegano_logger import get_logger
 from stegambit.models.dto import StegoTaskRequest, StegoResponse
-from stegambit.services.stego_service import StegoService, CompatibilityError
+from stegambit.services.stego_service import StegoService, CompatibilityError, InvalidFrameError
+from stegambit.core.crypto.engine import InvalidFrameError
 
 
 logger = get_logger(__name__)
 
 
-class StegoWorker(QObject):
-    """Воркер для операций сокрытия/извлечения.
-
-    Сигналы:
-        finished(StegoResponse): Операция завершилась (успех ИЛИ еррор в виде response.success=False).
-        error(str): Неожиданная ошибка уровня инфраструктуры.
-
-    UI подписывается на оба сигнала, на основе finished показывает метрики или текст ошибки.
+class StegoWorker(QThread):
+    """Сигналы:
+        finished: успешная операция ИЛИ ожидаемая ошибка CompatibilityError, неверный пароль.
+        erro: неожиданное исключение уровня инфраструктуры.
     """
 
     finished = pyqtSignal(StegoResponse)
     error = pyqtSignal(str)
 
     def __init__(self, request: StegoTaskRequest, mode: str) -> None:
-        """
+        """Инициализация worker'а в главном потоке.
+
         Args:
-            request: DTO с параметрами операции.
+            request: Замороженный DTO с параметрами операции.
             mode:    "encode" или "decode".
+
+        Note:
+            Тяжёлые объекты (StegoService) создаются в run(), а не здесь,
+            чтобы не нагружать момент создания worker'а в UI-потоке.
         """
         super().__init__()
         self._request = request
         self._mode = mode
-        self._service = StegoService()
 
-    def start(self) -> None:
-        """Запуск операции.
+    def run(self) -> None:
+        """Точка входа фонового потока.
 
-        В MVP-версии работает синхронно (блокирует поток вызова).
-        В ПРОДе будет перенаправлено в QThread.run().
+        Вызывается автоматически после QThread.start(). Выполняется в
+        отдельном потоке OS — никаких прямых обращений к UI отсюда!
+
+        Любой результат (успех, ожидаемая ошибка, авария) уезжает в
+        главный поток через сигналы.
         """
+        # Сервис создаётся ВНУТРИ run(), уже в фоновом потоке.
+        # Это снимает нагрузку с момента старта worker'а и гарантирует,
+        # что внутренние ресурсы сервиса (если такие появятся) принадлежат
+        # этому потоку.
+        service = StegoService()
+
         try:
             if self._mode == "encode":
                 logger.info(
                     f"Encode start: carrier={self._request.carrier_path.name}, "
                     f"payload={self._request.payload_path.name}"
                 )
-                response = self._service.hide_data(self._request)
+                response = service.hide_data(self._request)
                 logger.info(
                     f"Encode OK: out={self._request.output_path.name}, "
                     f"metrics={response.metrics}"
                 )
             elif self._mode == "decode":
                 logger.info(f"Decode start: stego={self._request.carrier_path.name}")
-                response = self._service.extract_data(self._request)
+                response = service.extract_data(self._request)
                 logger.info(
                     f"Decode OK: out={self._request.output_path.name}, "
                     f"metrics={response.metrics}"
@@ -76,9 +87,16 @@ class StegoWorker(QObject):
             self.finished.emit(response)
 
         except CompatibilityError as e:
+            # Ожидаемая бизнес-ошибка: некорректный формат, нарушение анти-конверсии, недостаточная ёмкость.
             logger.warning(f"{self._mode} compatibility error: {e}")
             self.finished.emit(StegoResponse(success=False, error=str(e)))
 
+        except InvalidFrameError as e:
+            # Ожидаемая ошибка извлечения: неверный пароль, файл без скрытых данных, повреждённый носитель.
+            logger.warning(f"{self._mode} invalid frame: {e}")
+            self.finished.emit(StegoResponse(success=False, error=str(e)))
+
         except Exception as e:
+            # Повреждённый файл, ошибка крипты, баг в ядре. critical-error через отдельный сигнал.
             logger.exception(f"{self._mode} crashed")
             self.error.emit(f"Внутренняя ошибка: {e}")

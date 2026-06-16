@@ -12,7 +12,7 @@ from stegambit.core.formats.jpeg import JpegFormat, JpegContainer
 from stegambit.core.formats.png import PngFormat
 from stegambit.core.formats.wav import WavFormat
 from stegambit.core.stego.strategies import DctProcessor, LsbProcessor
-from stegambit.core.crypto.engine import CryptoEngine, FrameLayout
+from stegambit.core.crypto.engine import CryptoEngine, FrameLayout, InvalidFrameError
 from stegambit.core.stego.spreader import SmartSpreader
 from stegambit.models.dto import (
     StegoTaskRequest,
@@ -44,6 +44,7 @@ _EXT_TO_FORMAT = {".png": "PNG", ".wav": "WAV", ".jpeg": "JPEG", ".jpg": "JPEG"}
 
 class CompatibilityError(Exception):
     """Нарушение политики Анти-Конверсии или нехватка ёмкости."""
+    pass
 
 
 class StegoService:
@@ -208,7 +209,7 @@ class StegoService:
         
 
         if header_bytes[:FrameLayout.MAGIC_LEN] != FrameLayout.MAGIC:
-            raise RuntimeError(
+            raise InvalidFrameError(
                 "MAGIC bytes не найдены. Возможно, неверный пароль или файл не содержит данных."
             )
 
@@ -245,12 +246,7 @@ class StegoService:
         full_frame = processor.extract(stego, coords_full, full_frame_size)
 
         # 8. Запись извлечённого payload в файл.
-        try:
-            payload_bytes = self._crypto.decrypt(full_frame, request.password)
-        except Exception as e:
-            raise RuntimeError(
-                f"Расшифровка провалилась: неверный пароль или повреждённые данные ({e})."
-            ) from e
+        payload_bytes = self._crypto.decrypt(full_frame, request.password)
 
         # Пытаемся определить оригинальный формат payload по magic bytes, чтобы вернуть файл с правильным расширением.
         # Если формат не опознан (текст, неподдерживаемый бинарь) — дефолтуется .bin.

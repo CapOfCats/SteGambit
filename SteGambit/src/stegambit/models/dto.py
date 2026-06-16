@@ -21,6 +21,11 @@ class StegoTaskRequest:
     payload_path: Path      # Путь к файлу для сокрытия
     output_path: Path       # Куда сохранить результат
     password: str           # Для шифрования
+    # TODO #22: dead field. Алгоритм определяется автоматически в
+    # StegoService через _FORMAT_TO_PROCESSOR[carrier_fmt]. Поле
+    # оставлено для обратной совместимости с ранними версиями GUI;
+    # никем не читается. Удалить в рамках #22 после аудита всех
+    # точек создания StegoTaskRequest.
     algorithm: str = "LSB"  # Какой алгоритм использовать
 
 
