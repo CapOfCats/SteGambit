@@ -1,0 +1,8 @@
+"""Общие фикстуры для core-тестов."""
+
+import pytest
+import numpy as np
+
+@pytest.fixture
+def rng():
+    return np.random.default_rng(seed=42)

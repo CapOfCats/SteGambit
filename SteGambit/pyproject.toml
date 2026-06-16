@@ -37,6 +37,11 @@ python_files = "test_*.py"
 pythonpath = ["src"]
 python_classes = "Test*"
 python_functions = "test_*"
+markers = [
+    "smoke: critical end-to-end scenarios",
+    "integration: tests involving multiple modules",
+    "io: tests touching real file system / external libraries",
+]
 
 addopts = [
     "--strict-markers",
