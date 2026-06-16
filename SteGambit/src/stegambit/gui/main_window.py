@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout, QLabel
 )
 from pathlib import Path
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QIcon
 
 from stegambit.models.dto import StegoTaskRequest
@@ -31,14 +31,20 @@ _CAPACITY_ERROR_MARKERS = (
 class MainWindow(QMainWindow):
     """
     Главное окно SteGambit.
-    Содержит: TabWidget (ENCODE/DECODE), MetricsPanel (collapsed/expanded), StatusBar, кнопку Settings.
-    Не содержит бизнес-логики, UI+ делегация в контроллер (TODO #17).
+    Содержит: TabWidget ENCODE/DECODE, MetricsPanel collapsed/expanded, StatusBar, кнопку Settings.
     """
-
+    _CAPACITY_ERROR_MARKERS = (
+        "Недостаточно ёмкости",
+        "ёмкости носителя",
+        "TOO LARGE",
+    )
     def __init__(self):
         super().__init__()
         self._settings = AppSettings()
         self._service = StegoService()
+        self._worker: StegoWorker | None = None
+        self._progress_timer: QTimer | None = None
+        self._progress_value: int = 0
         self._setup_window()
         self._build_ui()
         self._connect_signals()
@@ -202,9 +208,32 @@ class MainWindow(QMainWindow):
         dlg.confirmed.connect(self._on_encode_confirmed)
         dlg.exec()
 
+    def _start_fake_progress(self, label: str = "Processing..."):
+        self._progress_value = 0
+        self.encode_panel.set_progress(0, label)
+        if self._progress_timer is not None:
+            self._progress_timer.stop()
+        self._progress_timer = QTimer(self)
+        self._progress_timer.timeout.connect(self._tick_progress)
+        self._progress_timer.start(80)
+
+    def _tick_progress(self):
+        if self._progress_value < 90:
+            step = max(1, (90 - self._progress_value) // 12)
+            self._progress_value = min(90, self._progress_value + step)
+            label = "Encrypting..." if self._progress_value > 60 else "Spreading bits..."
+            self.encode_panel.set_progress(self._progress_value, label)
+
+    def _stop_fake_progress(self):
+        if self._progress_timer is not None:
+            self._progress_timer.stop()
+            self._progress_timer = None
 
     def _on_encode_confirmed(self, result: EncodeDialogResult):
         """Запуск Encode через StegoWorker."""
+        if self._is_worker_running():
+            self._set_status("Операция уже выполняется. Подождите...")
+            return
         cover = self.encode_panel.get_cover_path()
         payload = self.encode_panel.get_payload_path()
 
@@ -213,7 +242,7 @@ class MainWindow(QMainWindow):
             return
 
         self._set_status(f"Processing... | Output: {result.output_path.name}")
-        self.encode_panel.set_progress(50, "Spreading bits...")
+        self._start_fake_progress("Encrypting payload...")
 
         request = StegoTaskRequest(
             carrier_path=cover,
@@ -222,9 +251,10 @@ class MainWindow(QMainWindow):
             password=result.password,
         )
 
-        self._worker = StegoWorker(request, mode="encode")
+        self._worker = self._create_worker(request, mode="encode")
         self._worker.finished.connect(self._on_encode_finished)
         self._worker.error.connect(self._on_worker_error)
+        self._set_controls_enabled(False)
         self._worker.start()
     
     def _apply_status_color(self, status: QualityStatus):
@@ -248,9 +278,15 @@ class MainWindow(QMainWindow):
 
         MetricsData собирается здесь и передаётся в MetricsPanel.
         """
+        self._stop_fake_progress()
+        self._set_controls_enabled(True)
         if not response.success:
             self.encode_panel.reset_progress()
-            self._set_status(f"Ошибка: {response.error}")
+            if self._is_capacity_error(response.error):
+                self._show_capacity_error_dialog(response.error or "")
+                self._set_status("Not enough capacity — see dialog.")
+            else:
+                self._set_status(f"Ошибка: {response.error}")
             return
 
         self.encode_panel.set_progress(100, "Done.")
@@ -301,6 +337,9 @@ class MainWindow(QMainWindow):
 
     def _on_extract_requested(self):
         """Запуск Decode через StegoWorker."""
+        if self._is_worker_running():
+            self._set_status("Операция уже выполняется. Подождите...")
+            return
         stego = self.decode_panel.get_stego_path()
         output_dir = self.decode_panel.get_output_dir()
         password = self.decode_panel.get_password()
@@ -325,21 +364,24 @@ class MainWindow(QMainWindow):
             password=password,
         )
 
-        self._worker = StegoWorker(request, mode="decode")
+        self._worker = self._create_worker(request, mode="decode")
         self._worker.finished.connect(self._on_decode_finished)
         self._worker.error.connect(self._on_worker_error)
+        self._set_controls_enabled(False)
         self._worker.start()
 
     def _on_decode_finished(self, response):
+        self._set_controls_enabled(True)
         if response.success:
             metrics = response.metrics or {}
             t = metrics.get("time", 0)
             size = metrics.get("extracted_bytes", 0)
             fmt = metrics.get("detected_format", "UNKNOWN")
             self.decode_panel.set_log(
-                f"Извлечение успешно!\n"
+                f"Extraction successful!\n"
                 f"Saved to: {response.output_path}\n"
                 f"Detected format: {fmt}\n"
+                f"Note: extension auto-detected from payload magic bytes.\n"
                 f"Size: {size} bytes\n"
                 f"Time: {t:.2f}s\n"
                 f"Data Integrity: !!! Valid (AES-GCM tag verified)"
@@ -351,17 +393,28 @@ class MainWindow(QMainWindow):
     
     
     def _on_worker_error(self, message: str):
-        """Обработчик неожиданных ошибок воркера.
-           Ошибки нехватки ёмкости выводятся отдельным попапом.
-        """
+        """Обработчик неожиданных ошибок воркера."""
         self.encode_panel.reset_progress()
+        self._set_controls_enabled(True)
+        QMessageBox.critical(
+            self,
+            "SteGambit - внутренняя ошибка",
+            f"Неожиданная ошибка ядра:\n\n{message}\n\nПожалуйста, сообщите разработчику",
+        )
+        self._set_status(f"Critical error — see dialog")
 
-        if self._is_capacity_error(message):
-            self._show_capacity_error_dialog(message)
-            self._set_status("⚠ Not enough capacity — see dialog for details.")
-        else:
-            self._set_status(f"Critical: {message}")
+    def _is_worker_running(self) -> bool:
+        return self._worker is not None and self._worker.isRunning()
 
+    def _create_worker(self, request: StegoTaskRequest, mode: str) -> StegoWorker:
+        worker = StegoWorker(request, mode=mode)
+        worker.finished.connect(worker.deleteLater)
+        return worker
+
+    def _set_controls_enabled(self, enabled: bool):
+        self.encode_panel.btn_check.setEnabled(enabled)
+        self.encode_panel.btn_hide.setEnabled(enabled)
+        self.decode_panel.btn_extract.setEnabled(enabled)
 
     def _is_capacity_error(self, message: str) -> bool:
         """Определяет, является ли сообщение ошибкой нехватки ёмкости."""
