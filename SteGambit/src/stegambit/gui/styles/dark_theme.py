@@ -238,6 +238,18 @@ QLabel#label_indicator_red {
     color: #aa4a4a;
     font-weight: bold;
 }
+
+QPushButton#btn_metrics_toggle {
+    border: 1px solid #4a4a4a;
+    padding: 2px 10px;
+    background: #2a2a2a;
+    color: #d4d4d4;
+}
+
+QPushButton#btn_metrics_toggle:hover {
+    background-color: #333333;
+    border-color: #6a6a6a;
+}
 """
 
 

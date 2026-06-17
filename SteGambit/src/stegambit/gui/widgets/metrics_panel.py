@@ -1,9 +1,12 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QGroupBox, QGridLayout
+    QPushButton, QGroupBox, QGridLayout,
+    QSlider, QScrollArea, QSizePolicy
 )
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
+import wave
+import numpy as np
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
@@ -28,6 +31,221 @@ _SUMMARY_TEXT: dict[QualityStatus, str] = {
     QualityStatus.ANOMALY: "SUMMARY: SUCCESS — Quality ANOMALY",
 }
 
+def _render_waveform(path: Path, w: int, h: int, color: str = "#4aaa4a") -> Optional[QPixmap]:
+    """WAV → waveform QPixmap. Только stdlib wave + numpy."""
+    try:
+        with wave.open(str(path), "rb") as wf:
+            n_channels = wf.getnchannels()
+            sampwidth  = wf.getsampwidth()
+            n_frames   = wf.getnframes()
+            raw        = wf.readframes(n_frames)
+
+        dtype_map = {1: np.int8, 2: np.int16, 4: np.int32}
+        dtype     = dtype_map.get(sampwidth, np.int16)
+        samples   = np.frombuffer(raw, dtype=dtype)
+
+        if n_channels > 1:
+            samples = samples[::n_channels]  # стерео → моно
+
+        max_val = np.iinfo(dtype).max
+        samples = samples.astype(np.float32) / max_val
+
+        if len(samples) > w:
+            step    = len(samples) / w
+            indices = (np.arange(w) * step).astype(int)
+            samples = samples[indices]
+
+        pixmap = QPixmap(w, h)
+        pixmap.fill(QColor("#2a2a2a"))
+
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        pen = QPen(QColor(color))
+        pen.setWidth(1)
+        painter.setPen(pen)
+
+        mid    = h / 2
+        x_step = w / len(samples)
+        for i, s in enumerate(samples):
+            x = int(i * x_step)
+            painter.drawLine(x, int(mid), x, int(mid - s * mid * 0.9))
+
+        # центральная ось
+        painter.setPen(QPen(QColor("#3a5a3a")))
+        painter.drawLine(0, int(mid), w, int(mid))
+        painter.end()
+        return pixmap
+
+    except Exception:
+        return None
+
+class ZoomablePreview(QWidget):
+    """Превью одного файла: изображение / WAV-waveform + ползунок зума."""
+
+    _ZOOM_MIN  = 50
+    _ZOOM_MAX  = 300
+    _ZOOM_STEP = 10
+
+    def __init__(self, title: str, parent=None):
+        super().__init__(parent)
+        self._title    = title
+        self._raw_px: Optional[QPixmap] = None
+        self._base_w   = 200
+        self._base_h   = 150
+        self._zoom_pct = 100
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+        self.lbl_title = QLabel(self._title)
+        self.lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_title.setStyleSheet("color: #888888;")
+        layout.addWidget(self.lbl_title)
+
+        self._scroll = QScrollArea()
+        self._scroll.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._scroll.setWidgetResizable(False)
+        self._scroll.setFixedSize(self._base_w + 16, self._base_h + 16)
+        self._scroll.setStyleSheet(
+            "QScrollArea { border: 1px solid #4a4a4a; background: #2a2a2a; }"
+            "QScrollBar:horizontal { height: 6px; background: #1a1a1a; }"
+            "QScrollBar:vertical   { width:  6px; background: #1a1a1a; }"
+            "QScrollBar::handle    { background: #4a7a4a; border-radius: 3px; }"
+        )
+        self.lbl_image = QLabel()
+        self.lbl_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_image.setStyleSheet("background: #2a2a2a; color: #666666;")
+        self.lbl_image.setText("No preview")
+        self._scroll.setWidget(self.lbl_image)
+        layout.addWidget(self._scroll, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        self.lbl_info = QLabel("— MB")
+        self.lbl_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_info.setStyleSheet("color: #888888; font-size: 12px;")
+        layout.addWidget(self.lbl_info)
+
+        zoom_row = QHBoxLayout()
+        zoom_row.setSpacing(6)
+
+        btn_minus = QPushButton("[ − ]")
+        btn_minus.setFixedWidth(46)
+        btn_minus.setStyleSheet(self._btn_style())
+        btn_minus.clicked.connect(self._zoom_out)
+        zoom_row.addWidget(btn_minus)
+
+        self._slider = QSlider(Qt.Orientation.Horizontal)
+        self._slider.setRange(self._ZOOM_MIN, self._ZOOM_MAX)
+        self._slider.setValue(100)
+        self._slider.setSingleStep(self._ZOOM_STEP)
+        self._slider.setPageStep(self._ZOOM_STEP * 2)
+        self._slider.setFixedWidth(120)
+        self._slider.setStyleSheet(self._slider_style())
+        self._slider.valueChanged.connect(self._on_slider)
+        zoom_row.addWidget(self._slider)
+
+        btn_plus = QPushButton("[ + ]")
+        btn_plus.setFixedWidth(46)
+        btn_plus.setStyleSheet(self._btn_style())
+        btn_plus.clicked.connect(self._zoom_in)
+        zoom_row.addWidget(btn_plus)
+
+        self.lbl_zoom = QLabel("100%")
+        self.lbl_zoom.setFixedWidth(38)
+        self.lbl_zoom.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.lbl_zoom.setStyleSheet("color: #4a9a4a; font-size: 11px;")
+        zoom_row.addWidget(self.lbl_zoom)
+
+        layout.addLayout(zoom_row)
+
+
+    def load(self, path: Optional[Path], info_text: str = ""):
+        """Загрузить файл. Авто-определение: изображение / WAV / заглушка."""
+        self.lbl_info.setText(info_text)
+        self._raw_px   = None
+        self._zoom_pct = 100
+        self._slider.setValue(100)
+        self.lbl_zoom.setText("100%")
+
+        if path and path.exists():
+            suffix = path.suffix.lower()
+            if suffix == ".wav":
+                px = _render_waveform(path, self._base_w * 2, self._base_h * 2)
+                if px:
+                    self._raw_px = px
+                    self._apply_zoom()
+                    return
+            else:
+                px = QPixmap(str(path))
+                if not px.isNull():
+                    self._raw_px = px
+                    self._apply_zoom()
+                    return
+
+        self.lbl_image.setPixmap(QPixmap())
+        self.lbl_image.setText("No preview")
+        self.lbl_image.setFixedSize(self._base_w, self._base_h)
+
+    def reset(self):
+        self.load(None)
+        self.lbl_info.setText("— MB")
+
+    def _zoom_in(self):
+        self._slider.setValue(min(self._zoom_pct + self._ZOOM_STEP, self._ZOOM_MAX))
+
+    def _zoom_out(self):
+        self._slider.setValue(max(self._zoom_pct - self._ZOOM_STEP, self._ZOOM_MIN))
+
+    def _on_slider(self, value: int):
+        self._zoom_pct = value
+        self.lbl_zoom.setText(f"{value}%")
+        self._apply_zoom()
+
+    def _apply_zoom(self):
+        if self._raw_px is None:
+            return
+        scale  = self._zoom_pct / 100.0
+        new_w  = int(self._base_w * scale)
+        new_h  = int(self._base_h * scale)
+        scaled = self._raw_px.scaled(
+            QSize(new_w, new_h),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self.lbl_image.setPixmap(scaled)
+        self.lbl_image.setFixedSize(scaled.width(), scaled.height())
+
+    @staticmethod
+    def _btn_style() -> str:
+        return (
+            "QPushButton {"
+            "  border: 1px solid #4a7a4a; padding: 1px 4px;"
+            "  background: #1a2a1a; color: #4aaa4a; font-size: 11px;"
+            "}"
+            "QPushButton:hover  { background: #2a3a2a; }"
+            "QPushButton:pressed{ background: #0a1a0a; }"
+        )
+
+    @staticmethod
+    def _slider_style() -> str:
+        return (
+            "QSlider::groove:horizontal {"
+            "  height: 4px; background: #2a3a2a;"
+            "  border: 1px solid #3a5a3a; border-radius: 2px;"
+            "}"
+            "QSlider::handle:horizontal {"
+            "  width: 12px; height: 12px; margin: -4px 0;"
+            "  background: #4aaa4a; border: 1px solid #2a7a2a;"
+            "  border-radius: 6px;"
+            "}"
+            "QSlider::sub-page:horizontal {"
+            "  background: #3a7a3a; border-radius: 2px;"
+            "}"
+        )
 
 
 @dataclass
@@ -114,10 +332,8 @@ class MetricsPanel(QWidget):
         layout.addStretch()
 
         self.btn_toggle = QPushButton("[ ▼ Expand ]")
-        self.btn_toggle.setStyleSheet(
-            "border: 1px solid #4a4a4a; padding: 2px 10px;"
-            "background: #2a2a2a; color: #d4d4d4;"
-        )
+        self.btn_toggle.setObjectName("btn_metrics_toggle")
+
         self.btn_toggle.clicked.connect(self._toggle_expand)
         layout.addWidget(self.btn_toggle)
 
@@ -132,68 +348,38 @@ class MetricsPanel(QWidget):
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(10)
 
-        preview_group = QGroupBox("Image/Audio Preview")
-        preview_layout = QHBoxLayout(preview_group)
+        preview_group = QGroupBox("Image / Audio Preview")
+        preview_outer = QHBoxLayout(preview_group)
+        preview_outer.setContentsMargins(8, 8, 8, 8)
+        preview_outer.setSpacing(0)
 
-        # Оригинал
-        left_col = QVBoxLayout()
-        self.lbl_orig_title = QLabel("[Original]")
-        self.lbl_orig_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_orig_title.setStyleSheet("color: #888888;")
-        left_col.addWidget(self.lbl_orig_title)
+        preview_outer.addStretch(1)                          # ← прижимаем к центру
 
-        self.lbl_orig_image = QLabel()
-        self.lbl_orig_image.setFixedSize(200, 150)
-        self.lbl_orig_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_orig_image.setStyleSheet(
-            "border: 1px solid #4a4a4a; background: #2a2a2a; color: #666666;"
-        )
-        self.lbl_orig_image.setText("No preview")
-        left_col.addWidget(self.lbl_orig_image)
+        self._preview_orig = ZoomablePreview("[Original]")
+        preview_outer.addWidget(self._preview_orig)
 
-        self.lbl_orig_info = QLabel("Original: — MB")
-        self.lbl_orig_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_orig_info.setStyleSheet("color: #888888; font-size: 12px;")
-        left_col.addWidget(self.lbl_orig_info)
-        preview_layout.addLayout(left_col)
-
-        # Стрелка
         arrow = QLabel("→")
-        arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        arrow.setStyleSheet("font-size: 24px; color: #888888;")
-        preview_layout.addWidget(arrow)
+        arrow.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter)
+        arrow.setStyleSheet("font-size: 24px; color: #888888; padding: 0 16px;")
+        arrow.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        preview_outer.addWidget(arrow)
 
+        self._preview_result = ZoomablePreview("[Stego Result]")
+        preview_outer.addWidget(self._preview_result)
 
-        right_col = QVBoxLayout()
-        self.lbl_result_title = QLabel("[Stego Result]")
-        self.lbl_result_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_result_title.setStyleSheet("color: #888888;")
-        right_col.addWidget(self.lbl_result_title)
+        preview_outer.addStretch(1)                          # ← прижимаем к центру
 
-        self.lbl_result_image = QLabel()
-        self.lbl_result_image.setFixedSize(200, 150)
-        self.lbl_result_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_result_image.setStyleSheet(
-            "border: 1px solid #4a4a4a; background: #2a2a2a; color: #666666;"
-        )
-        self.lbl_result_image.setText("No preview")
-        right_col.addWidget(self.lbl_result_image)
-
-        self.lbl_result_info = QLabel("Result: — MB")
-        self.lbl_result_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_result_info.setStyleSheet("color: #888888; font-size: 12px;")
-        right_col.addWidget(self.lbl_result_info)
-        preview_layout.addLayout(right_col)
-
-        preview_layout.addStretch()
-
+        preview_outer.addSpacing(32)
         summary_col = QVBoxLayout()
+        summary_col.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
         self.lbl_summary = QLabel("SUMMARY: SUCCESS (100%)")
         self.lbl_summary.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_summary.setStyleSheet(
             "color: #4aaa4a; font-weight: bold; font-size: 15px;"
         )
         summary_col.addWidget(self.lbl_summary)
+
         self.lbl_summary_detail = QLabel("File-in-File concealed internally.")
         self.lbl_summary_detail.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_summary_detail.setStyleSheet("color: #888888; font-size: 12px;")
@@ -203,7 +389,9 @@ class MetricsPanel(QWidget):
         self.lbl_checkmark.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_checkmark.setStyleSheet("color: #4aaa4a; font-size: 36px;")
         summary_col.addWidget(self.lbl_checkmark)
-        preview_layout.addLayout(summary_col)
+
+        preview_outer.addLayout(summary_col)
+        preview_outer.addSpacing(12)
 
         root.addWidget(preview_group)
 
@@ -247,10 +435,7 @@ class MetricsPanel(QWidget):
         collapse_row = QHBoxLayout()
         collapse_row.addStretch()
         btn_collapse = QPushButton("[ ▲ Collapse ]")
-        btn_collapse.setStyleSheet(
-            "border: 1px solid #4a4a4a; padding: 2px 10px;"
-            "background: #2a2a2a; color: #d4d4d4;"
-        )
+        btn_collapse.setObjectName("btn_metrics_toggle")
         btn_collapse.clicked.connect(self._toggle_expand)
         collapse_row.addWidget(btn_collapse)
         root.addLayout(collapse_row)
@@ -270,18 +455,6 @@ class MetricsPanel(QWidget):
         Убрана старая _psnr_color(), теперь цвет берётся из бэкендового QualityStatus.
         """
         return _STATUS_COLOR.get(status, "#888888")
-
-
-    def _load_preview(self, label: QLabel, path: Optional[Path]):
-        if path and path.exists():
-            px = QPixmap(str(path)).scaled(
-                200, 150,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation
-            )
-            label.setPixmap(px)
-        else:
-            label.setText("No preview")
 
 
     def show_results(self, data: MetricsData):
@@ -320,13 +493,14 @@ class MetricsPanel(QWidget):
         sign = "+" if data.size_deviation_pct >= 0 else ""
         self.lbl_size.setText(f"Size: {sign}{data.size_deviation_pct:.1f}%")
 
-        self.lbl_orig_info.setText(f"Original: {data.carrier_size_mb:.1f} MB")
-        self.lbl_result_info.setText(
-            f"Result: {data.result_size_mb:.1f} MB  "
-            f"({sign}{data.size_deviation_pct:.1f}%)"
+        self._preview_orig.load(
+            data.original_path,
+            f"Original: {data.carrier_size_mb:.1f} MB"
         )
-        self._load_preview(self.lbl_orig_image, data.original_path)
-        self._load_preview(self.lbl_result_image, data.result_path)
+        self._preview_result.load(
+            data.result_path,
+            f"Result: {data.result_size_mb:.1f} MB  ({sign}{data.size_deviation_pct:.1f}%)"
+        )
 
         if data.psnr is not None:
             psnr_badge = "!!!" if data.psnr >= 40 else "???"
