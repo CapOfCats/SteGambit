@@ -134,7 +134,7 @@ class WavFormat:
             sampwidth = 2
             framerate = 44100
 
-        with wave.open(str(path), "wb") as wf:
+        with open(path, "wb") as f, wave.open(f, "wb") as wf:
             wf.setnchannels(n_channels)
             wf.setsampwidth(sampwidth)
             wf.setframerate(framerate)

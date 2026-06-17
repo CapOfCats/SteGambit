@@ -66,4 +66,5 @@ class PngFormat(FileFormat):
             Сжатие — стандартное Pillow (deflate). Без оптимизации, чтобы
             не тратить время на тяжёлый optimize=True.
         """
-        Image.fromarray(data).save(path, 'PNG')
+        with open(path, "wb") as f:
+            Image.fromarray(data).save(f, "PNG")

@@ -7,7 +7,6 @@ from PyQt6.QtWidgets import (
 from pathlib import Path
 from PyQt6.QtCore import Qt, QTimer, QUrl
 from PyQt6.QtGui import QDesktopServices
-
 from stegambit.core.exceptions import CompatibilityError
 from stegambit.infrastructure.stegano_logger import get_log_path
 from stegambit.models.dto import StegoTaskRequest
@@ -16,6 +15,7 @@ from stegambit.services.stego_service import StegoService
 from stegambit.models.dto import (
     StegoTaskRequest, StegoResponse, CapacityReport, QualityStatus
 )
+from stegambit.gui.styles.dark_theme import STATUS_STYLES
 from .widgets.metrics_panel import MetricsData
 from .widgets.encode_panel import EncodePanel
 from .widgets.decode_panel import DecodePanel
@@ -126,7 +126,7 @@ class MainWindow(QMainWindow):
         dlg = SettingsDialog(self._settings, parent=self)
         if dlg.exec():
             self._settings = dlg.get_settings()
-            self._set_status("Settings saved.")
+            self._set_status("Settings saved.", level="ok")
     
     def _open_log_file(self):
         """Открывает stegambit.log в системном просмотрщике."""
@@ -167,7 +167,7 @@ class MainWindow(QMainWindow):
                 password="",  
             )
         except (FileNotFoundError, ValueError, TypeError) as e:
-            self._set_status(f"Ошибка: {e}")
+            self._set_status(f"Ошибка: {e}", level="error")
             QMessageBox.warning(self, "SteGambit - Неверные параметры", str(e))
             return
 
@@ -176,19 +176,19 @@ class MainWindow(QMainWindow):
         except CompatibilityError as e:
             self.encode_panel.set_compatibility_result(f"⚠ Format not supported:\n{e}")
             self.encode_panel.set_hide_enabled(False)
-            self._set_status(f"Compatibility check failed: {e}")
+            self._set_status(f"Compatibility check failed: {e}", level="error")
             return
         except FileNotFoundError:
             self.encode_panel.set_compatibility_result("⚠ File not found. Check the path.")
             self.encode_panel.set_hide_enabled(False)
-            self._set_status("File not found.")
+            self._set_status("File not found.", level="error")
             return
         except Exception as e:
             self.encode_panel.set_compatibility_result(
                 f"⚠ Unexpected error:\n{type(e).__name__}: {e}"
             )
             self.encode_panel.set_hide_enabled(False)
-            self._set_status(f"Error: {type(e).__name__}")
+            self._set_status(f"Error: {type(e).__name__}", level="error")
             return
 
         status_line = (
@@ -211,19 +211,21 @@ class MainWindow(QMainWindow):
             self._set_status(
                 f"Compatibility check passed. "
                 f"Format: {report.format} → {report.algorithm}. "
-                f"Utilization: {report.utilization_percent:.1f}%. Ready to hide."
+                f"Utilization: {report.utilization_percent:.1f}%. Ready to hide.",
+                level="ok"
             )
         else:
             self._set_status(
                 f"Capacity insufficient: need {report.required_bits:,} bits, "
-                f"available {report.capacity_bits:,}."
+                f"available {report.capacity_bits:,}.",
+                level="warning"
             )
 
     def _on_hide_requested(self):
         """Открывает EncodeDialog для ввода пароля и пути."""
         cover = self.encode_panel.get_cover_path()
         if not cover:
-            self._set_status("Cover не выбран.")
+            self._set_status("Cover не выбран.", level="warning")
             return
         try:
             fmt = self._service.identify_format(cover)
@@ -278,7 +280,7 @@ class MainWindow(QMainWindow):
                 password=result.password,
             )
         except (FileNotFoundError, ValueError, TypeError) as e:
-            self._set_status(f"Ошибка: {e}")
+            self._set_status(f"Ошибка: {e}", level="error")
             QMessageBox.warning(self, "SteGambit - Неверные параметры", str(e))
             return
 
@@ -289,19 +291,18 @@ class MainWindow(QMainWindow):
         self._worker.start()
     
     def _apply_status_color(self, status: QualityStatus):
-        """Окрашивает статус-бар по QualityStatus.
-
-        OK      → зелёный фон
-        WARNING → жёлтый фон
-        ANOMALY → красный фон
+        """Транслирует QualityStatus → level и перекрашивает статус-бар.
+    
+        Текст не меняет — только цвет. Вызывается после _set_status("Done...").
         """
-        color_map = {
-            QualityStatus.OK:      "background-color: #1a2a1a; color: #4aaa4a;",
-            QualityStatus.WARNING: "background-color: #2a2a1a; color: #aaaa4a;",
-            QualityStatus.ANOMALY: "background-color: #2a1a1a; color: #aa4a4a;",
+        level_map = {
+            QualityStatus.OK:      "OK",
+            QualityStatus.WARNING: "WARNING",
+            QualityStatus.ANOMALY: "ERROR",
         }
-        style = color_map.get(status, "")
-        self.status_bar.setStyleSheet(style)
+        current = self.status_bar.currentMessage()
+        user_part = current.split("  |  Version")[0].replace("System Status: ", "")
+        self._set_status(user_part, level=level_map.get(status, "idle"))
 
 
     def _on_encode_finished(self, response):
@@ -315,9 +316,9 @@ class MainWindow(QMainWindow):
             self.encode_panel.reset_progress()
             if self._is_capacity_error(response.error):
                 self._show_capacity_error_dialog(response.error or "")
-                self._set_status("Not enough capacity — see dialog.")
+                self._set_status("Not enough capacity - see dialog.", level="warning")
             else:
-                self._set_status(f"Ошибка: {response.error}")
+                self._set_status(f"Ошибка: {response.error}", level="error")
             return
 
         self.encode_panel.set_progress(100, "Done.")
@@ -364,7 +365,7 @@ class MainWindow(QMainWindow):
         if ssim is not None:
             parts.append(f"SSIM: {ssim:.4f}")
         parts.append(f"Size Δ: {size_deviation:+.1f}%")
-        self._set_status(f"Done. {' | '.join(parts)}")
+        self._set_status(f"Done. {' | '.join(parts)}", level="ok")
 
     def _on_extract_requested(self):
         """Запуск Decode через StegoWorker."""
@@ -376,10 +377,10 @@ class MainWindow(QMainWindow):
         password = self.decode_panel.get_password()
 
         if not stego:
-            self._set_status("Stego-файл не выбран.")
+            self._set_status("Stego-файл не выбран.", level="warning")
             return
         if not output_dir:
-            self._set_status("Папка для сохранения не выбрана.")
+            self._set_status("Папка для сохранения не выбрана.", level="warning")
             return
 
         output_path = Path(output_dir) / f"extracted_{stego.stem}.bin"
@@ -392,7 +393,7 @@ class MainWindow(QMainWindow):
                 password=password,
             )
         except (FileNotFoundError, ValueError, TypeError) as e:
-            self._set_status(f"Ошибка: {e}")
+            self._set_status(f"Ошибка: {e}", level="error")
             QMessageBox.warning(self, "SteGambit — Неверные параметры", str(e))
             return
 
@@ -418,11 +419,11 @@ class MainWindow(QMainWindow):
                 f"Time: {t:.2f}s\n"
                 f"Data Integrity: !!! Valid (AES-GCM tag verified)"
             )
-            self._set_status(f"Извлечено в {response.output_path.name}")
+            self._set_status(f"Извлечено в {response.output_path.name}", level="ok")
         else:
             self.decode_panel.set_log(f"Ошибка: {response.error}")
             self._show_decode_error_dialog(response.error or "Неизвестная ошибка.")
-            self._set_status("Не удалось извлечь данные - см. диалог.")
+            self._set_status("Не удалось извлечь данные - см. диалог.", level="error")
     
     
     def _on_worker_error(self, message: str):
@@ -434,7 +435,7 @@ class MainWindow(QMainWindow):
             "SteGambit - внутренняя ошибка",
             f"Неожиданная ошибка ядра:\n\n{message}\n\nПожалуйста, сообщите разработчику",
         )
-        self._set_status(f"Critical error — see dialog")
+        self._set_status("Critical error — see dialog", level="error")
 
     def _is_worker_running(self) -> bool:
         if self._worker is None:
@@ -500,10 +501,18 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
 
-    def _set_status(self, message: str):
+    def _set_status(self, message: str, level: str = "idle"):
+        """Обновляет статус-бар с цветовым кодированием.
+
+        Args:
+            message: текст сообщения.
+            level:   "idle" | "ok" | "warning" | "error"
+        """
+        style = STATUS_STYLES.get(level, STATUS_STYLES["idle"])
+        self.status_bar.setStyleSheet(style)
         self.status_bar.showMessage(
             f"System Status: {message}  |  Version AlphaCentavra"
-        )
+    )
 
 
     def show_metrics(self, data):
