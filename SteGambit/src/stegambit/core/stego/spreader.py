@@ -1,9 +1,8 @@
 from typing import Optional, Set
-import hashlib
 import numpy as np
 
 from ..base import ISpreader
-
+from ..common.seeding import derive_rng_from_password
 
 class SmartSpreader(ISpreader):
     """Content-aware Spreader с Edge Detection.
@@ -51,21 +50,49 @@ class SmartSpreader(ISpreader):
 
         return np.flatnonzero(mask_flat).astype(np.int64)
 
-    def _seed_rng(self, password_seed: str) -> np.random.Generator:
-        """Детерминированный RNG из пароля через SHA-256.
-        Это реализация сида по паролю. Чуть отличился символ - сид уже кардинально другой,
-        но абсолютно идентичен, если пароль всегда один."""
-        digest = hashlib.sha256(password_seed.encode("utf-8")).digest()
-        seed_int = int.from_bytes(digest[:8], "big", signed=False) # тут дергаем байты для сида
-        return np.random.default_rng(seed_int)
-
     def get_max_capacity_bits(self, container: np.ndarray) -> int:
+        """Возвращает реальную ёмкость пула координат после edge-detection.
+
+        Args:
+            container: Контейнер (RGB image, audio samples).
+
+        Returns:
+            Число позиций, прошедших порог GRADIENT_THRESHOLD.
+            Может быть СУЩЕСТВЕННО меньше container.size: для гладких
+            изображений (заливка одним цветом) может быть близко к нулю.
+        """
         return int(self._build_edge_pool(container).size)
 
     def generate_coords(self, container: np.ndarray, payload_bits_len: int,
                         password_seed: str,
                         exclude_coords: Optional[Set[int]] = None) -> np.ndarray:
-        """Генерация координат для сокрытия, поддержана фича с фейковым payload."""
+        """Генерирует payload_bits_len координат для embed.
+
+        Алгоритм:
+            1. Построить пул через edge-detection (_build_edge_pool).
+            2. Если задан exclude_coords (decoy-режим) — вычесть их из пула.
+            3. Проверить, что в пуле достаточно мест.
+            4. Детерминированно перемешать пул seed'ом из пароля.
+            5. Вернуть первые payload_bits_len координат.
+
+        Args:
+            container:        Контейнер-носитель.
+            payload_bits_len: Сколько координат нужно (= размер payload в битах).
+            password_seed:    Пароль для seed-генерации (см. core/common/seeding).
+            exclude_coords:   Координаты, занятые decoy-payload (ADR 004).
+                              Реальный payload должен внедряться в позиции,
+                              отличные от decoy, иначе при extract decoy
+                              мы попадём на чужие биты.
+
+        Returns:
+            1D ndarray длины payload_bits_len с flat-индексами.
+
+        Raises:
+            ValueError: Если после фильтрации в пуле меньше координат,
+                        чем требуется для payload_bits_len.
+                        Сообщение содержит расчёт нехватки в байтах
+                        для UI-диалога.
+        """
         pool = self._build_edge_pool(container)
 
         if exclude_coords:
@@ -82,6 +109,6 @@ class SmartSpreader(ISpreader):
                 f"Возьмите контейнер большего размера или payload меньшего размера."
             )
 
-        rng = self._seed_rng(password_seed) # перемешивает пул в соответствии с seed-фразой
-        rng.shuffle(pool) # shuffle, без дополнительных аллокаций
+        rng = derive_rng_from_password(password_seed)  # SHA-256 → seed (см. core/common/seeding)
+        rng.shuffle(pool)  # in-place, без дополнительных аллокаций
         return pool[:payload_bits_len]

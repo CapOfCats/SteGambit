@@ -1,5 +1,4 @@
 """StegoService — главный Фасад пайплайна сокрытия."""
-import hashlib
 from pathlib import Path
 from typing import Any, Optional
 
@@ -7,19 +6,21 @@ import numpy as np
 import struct
 import time
 
+from stegambit.core.exceptions import InvalidFrameError
 from stegambit.core.common.format_id import FormatIdentifier, get_default_extension
 from stegambit.core.formats.jpeg import JpegFormat, JpegContainer
 from stegambit.core.formats.png import PngFormat
 from stegambit.core.formats.wav import WavFormat
 from stegambit.core.stego.strategies import DctProcessor, LsbProcessor
-from stegambit.core.crypto.engine import CryptoEngine, FrameLayout, InvalidFrameError
+from stegambit.core.crypto.engine import CryptoEngine, FrameLayout
 from stegambit.core.stego.spreader import SmartSpreader
+from stegambit.core.exceptions import CompatibilityError
 from stegambit.models.dto import (
     StegoTaskRequest,
     StegoResponse,
     CapacityReport,
-    QualityStatus,
 )
+from stegambit.core.common.seeding import shuffle_pool_by_password
 from stegambit.services.analytics.metrics import (
     calculate_psnr,
     calculate_ssim,
@@ -40,11 +41,6 @@ _FORMAT_TO_PROCESSOR = {
 }
 
 _EXT_TO_FORMAT = {".png": "PNG", ".wav": "WAV", ".jpeg": "JPEG", ".jpg": "JPEG"}
-
-
-class CompatibilityError(Exception):
-    """Нарушение политики Анти-Конверсии или нехватка ёмкости."""
-    pass
 
 
 class StegoService:
@@ -110,8 +106,8 @@ class StegoService:
                 password_seed=request.password,
             )
         else:
-            # Для JPEG пул — уже отфильтрованные DCT-позиции. Перемешиваем детерминированно по паролю.
-            coords = self._shuffle_pool_by_password(pool, request.password)[:required_bits]
+            
+            coords = shuffle_pool_by_password(pool, request.password)[:required_bits]
 
         # Снапшот для sanity-check (только DCT — для LSB sanity на PSNR=inf).
         pre_embed_snapshot = None
@@ -120,11 +116,6 @@ class StegoService:
 
         # 7. Внедрение.
         stego = processor.embed(original, encrypted, coords)
-
-        if processor_kind == "DCT":
-            print(f"DEBUG hide: pool size = {pool.size}")
-            print(f"DEBUG hide: coords[:10] = {coords[:10]}")
-            print(f"DEBUG hide: encrypted[:8].hex() = {encrypted[:8].hex()}")
 
         # 8. Сохраняем.
         fmt_handler.save(stego, request.output_path)
@@ -199,7 +190,7 @@ class StegoService:
                 password_seed=request.password,
             )
         else:
-            coords_for_header = self._shuffle_pool_by_password(pool, request.password)[:header_bits]
+            coords_for_header = shuffle_pool_by_password(pool, request.password)[:header_bits]
 
         header_bytes = processor.extract(stego, coords_for_header, header_size)
 
@@ -241,7 +232,7 @@ class StegoService:
                 password_seed=request.password,
             )
         else:
-            coords_full = self._shuffle_pool_by_password(pool, request.password)[:full_frame_bits]
+            coords_full = shuffle_pool_by_password(pool, request.password)[:full_frame_bits]
 
         full_frame = processor.extract(stego, coords_full, full_frame_size)
 
@@ -393,20 +384,20 @@ class StegoService:
         elapsed = time.perf_counter() - t0
         metrics: dict[str, Any] = {"time": elapsed}
 
-        #  LSB-метрики - пиксельный домен 
         if processor_kind == "LSB":
-            psnr = calculate_psnr(original, stego)
+            original_arr = np.asarray(original)
+            stego_arr = np.asarray(stego)
+
+            psnr = calculate_psnr(original_arr, stego_arr)
             if psnr == float("inf"):
                 raise RuntimeError(
-                    "Проверка внедрения провалена: стего-контейнер идентичен "
-                    "исходному. Информация не была внедрена."
+                    "Проверка внедрения провалена: стего-контейнер идентичен исходному. Информация не была внедрена."
                 )
             metrics["psnr"] = psnr
-            metrics["ssim"] = calculate_ssim(original, stego)
+            metrics["ssim"] = calculate_ssim(original_arr, stego_arr)
 
         #  DCT sanity-check - без PSNR/SSIM 
         elif processor_kind == "DCT":
-            assert isinstance(stego, JpegContainer)
             if pre_embed_snapshot is None:
                 raise RuntimeError(
                     "DCT sanity-check требует pre_embed_snapshot. "
@@ -436,35 +427,3 @@ class StegoService:
         )
 
         return metrics
-    
-
-    @staticmethod
-    def _shuffle_pool_by_password(pool: np.ndarray, password: str) -> np.ndarray:
-        """Детерминированно перемешивает пул координат seed'ом из пароля.
-
-        Используется для DCT-пайплайна, где SmartSpreader неприменим
-        (edge-detection — это пространственный анализ, бессмысленный
-        для DCT-коэффициентов в частотном домене).
-
-        TODO [#XX рефакторинг spreading]:
-            Этот метод дублирует логику SmartSpreader._seed_rng + rng.shuffle.
-            План:
-                1. Вынести seed-perestановку в отдельный класс
-                   PasswordSeededShuffler в core/stego/.
-                2. SmartSpreader = EdgeDetector + Shuffler (композиция).
-                3. Для DCT — DctSpreader = Shuffler (без edge-detection),
-                   входной пул берётся из DctProcessor.get_embeddable_positions().
-                4. StegoService перестаёт знать про шифровку seed'а — это
-                   ответственность core/stego, а не сервисного слоя.
-
-            Сейчас оставлено как есть ради скорости MVP. При рефакторинге
-            этот метод УДАЛИТЬ полностью, перенеся логику в Shuffler.
-        """
-        digest = hashlib.sha256(password.encode("utf-8")).digest()
-        seed_int = int.from_bytes(digest[:8], "big", signed=False)
-        rng = np.random.default_rng(seed_int)
-        pool_copy = pool.copy()
-        rng.shuffle(pool_copy)
-        return pool_copy
-    
-    # TODO: На проде убрать ассерты!11! 

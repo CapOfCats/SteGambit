@@ -4,7 +4,9 @@ import zlib
 from dataclasses import dataclass
 from enum import IntFlag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.exceptions import InvalidTag
 
+from stegambit.core.exceptions import InvalidFrameError, InvalidPasswordError
 from .key_manager import KeyManager
 
 
@@ -42,11 +44,6 @@ class _ParsedFrame:
     ciphertext: bytes
 
 
-class InvalidFrameError(RuntimeError):
-    """Невалидный magic, повреждение заголовка или неверный пароль."""
-    pass
-
-
 class CryptoEngine:
     """AES-256-GCM шифрование с упаковкой в 57-байтный фрейм по ADR 006.
 
@@ -69,22 +66,29 @@ class CryptoEngine:
 
     @staticmethod
     def encrypt(data: bytes, password: str, /, *, flags: int = 0) -> bytes:
-        """Шифрует data и упаковывает в 57-байтный фрейм по - ADR 006.
+        """Шифрует data и упаковывает в crypto-frame по ADR 006.
 
-        Как работает:
-            1. Опциональное zlib-сжатие (эвристика).
-            2. Генерация случайных SALT (16) и NONCE (12).
-            3. PBKDF2 -> AES-ключ.
-            4. AES-GCM -> ciphertext + MAC.
-            5. Сборка фрейма MAGIC|FLAGS|SALT|NONCE|LENGTH|MAC|DATA
+        Pipeline:
+            1. Опциональное zlib-сжатие (по эвристике _should_compress).
+            2. Генерация случайных SALT (16 байт) и NONCE (12 байт).
+            3. PBKDF2(password, salt) -> AES-ключ.
+            4. AES-GCM(nonce, key) -> ciphertext + 16-байтный MAC.
+            5. Сборка фрейма: MAGIC | FLAGS | SALT | NONCE | LENGTH | MAC | DATA.
 
         Args:
-            data: исходные байты payload.
-            password: пароль пользователя.
-            flags: дополнительные биты FLAGS (например, IS_DECOY). Бит COMPRESSED выставляется автоматически.
+            data:     Исходные байты payload.
+            password: Пароль пользователя (любая строка, включая пустую).
+            flags:    Дополнительные биты FLAGS (например, IS_DECOY).
+                      Бит COMPRESSED выставляется автоматически — управлять
+                      им снаружи нельзя.
 
         Returns:
-            Готовый к внедрению бинарный блоб.
+            Бинарный блоб: HEADER_LEN (57 байт) + ciphertext.
+            Размер ciphertext равен len(data) после возможного zlib-сжатия.
+
+        Note:
+            Каждый вызов генерирует новый SALT и NONCE — два вызова encrypt
+            с одинаковыми (data, password) дают РАЗНЫЕ outputs. Это by design.
         """
         processed, compressed = CryptoEngine._should_compress(data)
         if compressed:
@@ -107,7 +111,6 @@ class CryptoEngine:
             + struct.pack(">Q", length) # Упаковка в 8-байтовый беззнаковый тип. Задел под кроссплатформенность
             + mac
         )
-        assert len(header) == FrameLayout.HEADER_LEN, "Header size mismatch (ADR 006)" # TODO: Вырезать в проде.
         return header + ciphertext
 
     @staticmethod
@@ -141,10 +144,27 @@ class CryptoEngine:
 
     @staticmethod
     def decrypt(frame: bytes, password: str) -> bytes:
-        """Расшифровывает фрейм, валидирует MAC, опционально распаковывает zlib.
+        """Расшифровывает crypto-frame и возвращает исходные байты payload.
+
+        Pipeline (зеркало encrypt):
+            1. Парсинг фрейма (MAGIC валидация, FLAGS, SALT, NONCE, LENGTH, MAC).
+            2. PBKDF2(password, salt) -> AES-ключ.
+            3. AES-GCM.decrypt -> plaintext + проверка MAC.
+            4. Опциональная zlib-распаковка, если выставлен флаг COMPRESSED.
+
+        Args:
+            frame:    Бинарный блоб ровно того формата, что вернул encrypt().
+            password: Пароль пользователя.
+
+        Returns:
+            Исходные байты payload, идентичные тем, что были переданы в encrypt.
 
         Raises:
-            InvalidFrameError: если битый заголовок, неверный MAGIC, повреждение данных или неверный пароль.
+            InvalidFrameError:    Битый заголовок или неверный MAGIC
+                                  (файл не содержит данных SteGambit).
+            InvalidPasswordError: Неверный пароль ИЛИ данные были изменены
+                                  после embed (MAC mismatch). Различить эти
+                                  два случая криптографически невозможно.
         """
         parsed = CryptoEngine._parse_frame(frame)
         key = KeyManager.derive_key(password, parsed.salt)
@@ -155,9 +175,11 @@ class CryptoEngine:
                 parsed.ciphertext + parsed.mac,
                 associated_data=None,
             )
-        except Exception as e:
-            # cryptography.InvalidTag и всё, что летит из hazmat.
-            raise InvalidFrameError("Decryption failed: wrong password or tampered data") from e
+        except InvalidTag as e:
+            raise InvalidPasswordError(
+                "Неверный пароль или данные повреждены. "
+                "Проверьте пароль и убедитесь, что файл действительно содержит скрытые данные."
+            ) from e
 
         if parsed.flags & Flags.COMPRESSED:
             plaintext = zlib.decompress(plaintext)
@@ -165,5 +187,11 @@ class CryptoEngine:
 
     @staticmethod
     def header_size() -> int:
-        """Размер фрейма без payload - нужен CapacityAnalyzer."""
+        """Возвращает размер crypto-frame БЕЗ payload в байтах.
+
+        Используется CapacityAnalyzer и StegoService для подсчёта реальной
+        ёмкости носителя (= общая ёмкость - служебные байты).
+
+        Returns:
+            Фиксированный размер HEADER_LEN (57 байт по ADR 006)."""
         return FrameLayout.HEADER_LEN

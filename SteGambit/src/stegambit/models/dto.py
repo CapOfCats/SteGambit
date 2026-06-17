@@ -1,4 +1,9 @@
-from dataclasses import dataclass, field
+"""DTO-слой SteGambit.
+
+Все DTO неизменяемы (frozen=True) и валидируют входные данные
+через __post_init__. Архитектурное обоснование: см. ADR 009.
+"""
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -14,24 +19,60 @@ class QualityStatus(str, Enum):
     WARNING = "WARNING"
     ANOMALY = "ANOMALY"
 
+
 @dataclass(frozen=True)
 class StegoTaskRequest:
-    """Запрос на сокрытие данных"""
-    carrier_path: Path      # Путь к контейнеру
-    payload_path: Path      # Путь к файлу для сокрытия
-    output_path: Path       # Куда сохранить результат
-    password: str           # Для шифрования
-    # TODO #22: dead field. Алгоритм определяется автоматически в
-    # StegoService через _FORMAT_TO_PROCESSOR[carrier_fmt]. Поле
-    # оставлено для обратной совместимости с ранними версиями GUI;
-    # никем не читается. Удалить в рамках #22 после аудита всех
-    # точек создания StegoTaskRequest.
-    algorithm: str = "LSB"  # Какой алгоритм использовать
+    """Запрос на сокрытие или извлечение данных.
+
+    Поля валидируются в __post_init__:
+        * carrier_path - должен существовать и быть файлом.
+        * payload_path - должен существовать и быть файлом.
+        * output_path  - родительская директория должна существовать.
+        * password     - допустима пустая строка.
+
+    Пути нормализуются через Path(...).resolve().
+
+    Raises:
+        FileNotFoundError: Если output_path.parent отсутствуют.
+        ValueError:        Если carrier/payload не являются файлами.
+        TypeError:         Если password не строка.
+    """
+    carrier_path: Path
+    payload_path: Path
+    output_path: Path
+    password: str
+
+    def __post_init__(self):
+        carrier = Path(self.carrier_path).resolve()
+        if not carrier.exists():
+            raise FileNotFoundError(f"Carrier not found: {carrier}")
+        if not carrier.is_file():
+            raise ValueError(f"Carrier is not a file: {carrier}")
+        object.__setattr__(self, "carrier_path", carrier)
+
+        payload = Path(self.payload_path).resolve()
+        if not payload.exists():
+            raise FileNotFoundError(f"Payload not found: {payload}")
+        if not payload.is_file():
+            raise ValueError(f"Payload is not a file: {payload}")
+        object.__setattr__(self, "payload_path", payload)
+
+        output = Path(self.output_path).resolve()
+        if not output.parent.exists():
+            raise FileNotFoundError(
+                f"Output directory does not exist: {output.parent}"
+            )
+        object.__setattr__(self, "output_path", output)
+
+        if not isinstance(self.password, str):
+            raise TypeError(
+                f"Password must be str, got {type(self.password).__name__}"
+            )
 
 
 @dataclass(frozen=True)
 class StegoResponse:
-    """Результат операции"""
+    """Результат операции."""
     success: bool
     output_path: Optional[Path] = None
     metrics: Optional[Dict[str, Any]] = None  # PSNR, время и т.д.
@@ -42,16 +83,13 @@ class StegoResponse:
 class CapacityReport:
     """Отчёт о пропускной способности контейнера для предварительной валидации.
 
-    Возвращается StegoService.analyze_capacity() до фактической операции
-    сокрытия. Используется UI (вкладка Encode → Check Compatibility),
-    чтобы заранее показать реальные цифры и не запускать невозможную операцию.
-
+    Возвращается StegoService.analyze_capacity() до фактической операции сокрытия.
     """
-    fits: bool                  # Флаг ВОЗМОЖНОСТИ сокрытия
-    format: str                 # Один из поддерживаемых форматов
-    algorithm: str              # LSB или DCT
-    capacity_bits: int          # Доступная ёмкость в битах
-    required_bits: int          # Сколько нужно для payload + crypto-frame
-    payload_size_bytes: int     # Размер исходного скрываемого файла
-    header_size_bytes: int      # Накладные расходы CryptoEngine (57 байт)
-    utilization_percent: float  # Процент использования ёмкости
+    fits: bool
+    format: str
+    algorithm: str
+    capacity_bits: int
+    required_bits: int
+    payload_size_bytes: int
+    header_size_bytes: int
+    utilization_percent: float

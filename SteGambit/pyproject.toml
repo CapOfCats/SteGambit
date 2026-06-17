@@ -38,11 +38,13 @@ pythonpath = ["src"]
 python_classes = "Test*"
 python_functions = "test_*"
 markers = [
-    "smoke: critical end-to-end scenarios",
+    "smoke: critical end‑to‑end scenarios",
     "integration: tests involving multiple modules",
     "io: tests touching real file system / external libraries",
+    "smoke: критичные сценарии, прогоняются всегда",
+    "slow: тесты дольше 1 секунды",
+    "integration: тесты с реальным I/O и полным pipeline"
 ]
-
 addopts = [
     "--strict-markers",
     "--tb=short",
@@ -53,12 +55,6 @@ addopts = [
     "--cov-report=html:docs/testing/coverage",
     "--html=docs/testing/report.html",
     "--self-contained-html",
-]
-
-markers = [
-    "smoke: критичные сценарии, прогоняются всегда",
-    "slow: тесты дольше 1 секунды",
-    "integration: тесты с реальным I/O и полным pipeline",
 ]
 
 [project.gui-scripts]

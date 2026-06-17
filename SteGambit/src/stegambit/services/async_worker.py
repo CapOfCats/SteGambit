@@ -17,9 +17,11 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from stegambit.infrastructure.stegano_logger import get_logger
 from stegambit.models.dto import StegoTaskRequest, StegoResponse
-from stegambit.services.stego_service import StegoService, CompatibilityError, InvalidFrameError
-from stegambit.core.crypto.engine import InvalidFrameError
-
+from stegambit.services.stego_service import StegoService
+from stegambit.core.exceptions import (
+    InvalidFrameError, CompatibilityError,
+    InvalidPasswordError, CorruptedCarrierError,
+)
 
 logger = get_logger(__name__)
 
@@ -94,6 +96,16 @@ class StegoWorker(QThread):
         except InvalidFrameError as e:
             # Ожидаемая ошибка извлечения: неверный пароль, файл без скрытых данных, повреждённый носитель.
             logger.warning(f"{self._mode} invalid frame: {e}")
+            self.finished.emit(StegoResponse(success=False, error=str(e)))
+        
+        except InvalidPasswordError as e:
+            # Ожидаемая ошибка: AES-GCM MAC mismatch. Неверный пароль или битые данные.
+            logger.warning(f"{self._mode} invalid password: {e}")
+            self.finished.emit(StegoResponse(success=False, error=str(e)))
+
+        except CorruptedCarrierError as e:
+            # Ожидаемая ошибка: повреждённый файл.
+            logger.warning(f"{self._mode} corrupted carrier: {e}")
             self.finished.emit(StegoResponse(success=False, error=str(e)))
 
         except Exception as e:

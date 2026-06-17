@@ -7,9 +7,10 @@ from pathlib import Path
 import wave
 
 import numpy as np
+from numpy.random._generator import Generator
 import pytest
 
-from stegambit.core.formats.wav import WavFormat
+from stegambit.core.formats.wav import WavFormat, WavContainer
 
 
 @pytest.fixture
@@ -20,28 +21,48 @@ def wav_format():
 @pytest.mark.io
 class TestLoad:
 
-    def test_load_returns_ndarray(self, wav_format, wav_carrier):
-        """load возвращает np.ndarray."""
-        arr = wav_format.load(wav_carrier)
+    def test_load_returns_container(self, wav_format: WavFormat, wav_carrier):
+        """Property: load возвращает WavContainer (а не голый ndarray)."""
+        from stegambit.core.formats.wav import WavContainer
+        result = wav_format.load(wav_carrier)
+        assert isinstance(result, WavContainer)
+
+    def test_load_samples_is_ndarray(self, wav_format: WavFormat, wav_carrier):
+        """Property: container.samples - np.ndarray."""
+        container = wav_format.load(wav_carrier)
+        assert isinstance(container.samples, np.ndarray)
+
+    def test_load_samples_dtype_is_int16(self, wav_format: WavFormat, wav_carrier):
+        """Property: WAV семплы - int16."""
+        container = wav_format.load(wav_carrier)
+        assert container.samples.dtype == np.int16
+
+    def test_load_samples_is_1d(self, wav_format: WavFormat, wav_carrier):
+        """Property: семплы возвращаются как 1D-массив."""
+        container = wav_format.load(wav_carrier)
+        assert container.samples.ndim == 1
+
+    def test_load_preserves_metadata(self, wav_format: WavFormat, wav_carrier):
+        """Property: метаданные сохранены."""
+        container = wav_format.load(wav_carrier)
+        assert container.n_channels >= 1
+        assert container.sampwidth in (1, 2, 4)
+        assert container.framerate > 0
+
+    def test_container_array_protocol(self, wav_format: WavFormat, wav_carrier):
+        """Property: np.asarray(container) работает (контракт ndarray-like)."""
+        container = wav_format.load(wav_carrier)
+        arr = np.asarray(container)
         assert isinstance(arr, np.ndarray)
+        np.testing.assert_array_equal(arr, container.samples)
 
-    def test_load_dtype_is_int16(self, wav_format, wav_carrier):
-        """WAV семплы — int16 (контракт нашего пайплайна)."""
-        arr = wav_format.load(wav_carrier)
-        assert arr.dtype == np.int16
-
-    def test_load_is_1d(self, wav_format, wav_carrier):
-        """Cемплы возвращаются как 1D-массив."""
-        arr = wav_format.load(wav_carrier)
-        assert arr.ndim == 1
-
-    def test_load_missing_file_raises(self, wav_format, tmp_path):
+    def test_load_missing_file_raises(self, wav_format: WavFormat, tmp_path: Path):
         """Негативный кейз: несуществующий файл."""
         with pytest.raises(FileNotFoundError):
             wav_format.load(tmp_path / "ghost.wav")
 
-    def test_load_corrupt_file_raises(self, wav_format, tmp_path):
-        """Негативный кейз: битый WAV - исключение от wave-модуля."""
+    def test_load_corrupt_file_raises(self, wav_format: WavFormat, tmp_path: Path):
+        """Негативный кейз: битый WAV -> исключение от wave-модуля."""
         broken = tmp_path / "broken.wav"
         broken.write_bytes(b"RIFFnot_a_real_wav_file")
         with pytest.raises(Exception):
@@ -51,15 +72,16 @@ class TestLoad:
 @pytest.mark.io
 class TestSave:
 
-    def test_save_creates_file(self, wav_format, rng, tmp_path):
-        """save создаёт WAV-файл."""
+    def test_save_from_container_creates_file(self, wav_format: WavFormat, rng: Generator, tmp_path: Path):
+        """save из WavContainer создаёт WAV-файл."""
         samples = rng.integers(-32768, 32767, size=4410, dtype=np.int16)
+        container = WavContainer(samples=samples, n_channels=1, sampwidth=2, framerate=44100)
         out = tmp_path / "out.wav"
-        wav_format.save(samples, out)
+        wav_format.save(container, out)
         assert out.exists()
         assert out.stat().st_size > 0
 
-    def test_save_writes_expected_params(self, wav_format, rng, tmp_path):
+    def test_save_from_ndarray_uses_defaults(self, wav_format: WavFormat, rng: Generator, tmp_path: Path):
         """Cохранённый WAV имеет 1 канал, 16 бит, 44100 Hz."""
         samples = rng.integers(-32768, 32767, size=4410, dtype=np.int16)
         out = tmp_path / "out.wav"
@@ -69,22 +91,55 @@ class TestSave:
             assert w.getnchannels() == 1
             assert w.getsampwidth() == 2
             assert w.getframerate() == 44100
+    
+    def test_save_preserves_stereo_48khz(self, wav_format: WavFormat, rng: Generator, tmp_path: Path):
+        """Property: stereo 48kHz после save сохраняет параметры."""
+        samples = rng.integers(-32768, 32767, size=96000, dtype=np.int16)
+        container = WavContainer(samples=samples, n_channels=2, sampwidth=2, framerate=48000)
+        out = tmp_path / "stereo.wav"
+        wav_format.save(container, out)
+
+        with wave.open(str(out), "rb") as w:
+            assert w.getnchannels() == 2
+            assert w.getsampwidth() == 2
+            assert w.getframerate() == 48000
 
 
 @pytest.mark.io
 class TestRoundTrip:
 
-    def test_round_trip_preserves_samples(self, wav_format, rng, tmp_path):
+    def test_round_trip_preserves_samples_and_metadata(self, wav_format: WavFormat, wav_carrier, tmp_path: Path):
         """PCM int16 WAV - lossless, семплы идентичны."""
-        original = rng.integers(-32768, 32767, size=4410, dtype=np.int16)
+        original = wav_format.load(wav_carrier)
         out = tmp_path / "rt.wav"
         wav_format.save(original, out)
         loaded = wav_format.load(out)
-        np.testing.assert_array_equal(original, loaded)
+
+        np.testing.assert_array_equal(original.samples, loaded.samples)
+        assert original.n_channels == loaded.n_channels
+        assert original.sampwidth == loaded.sampwidth
+        assert original.framerate == loaded.framerate
+    
+    def test_round_trip_after_lsb_modification_preserves_metadata(self, wav_format: WavFormat, wav_carrier, tmp_path: Path):
+        """Модификация массива не теряет метаданные при сохранении."""
+        container = wav_format.load(wav_carrier)
+        original_channels = container.n_channels
+        original_framerate = container.framerate
+
+        # Симулируем LSB-вмешательство.
+        container.samples[0] ^= 1
+        container.samples[100] ^= 1
+
+        out = tmp_path / "modified.wav"
+        wav_format.save(container, out)
+        reloaded = wav_format.load(out)
+
+        assert reloaded.n_channels == original_channels
+        assert reloaded.framerate == original_framerate
 
 
 class TestMagic:
 
-    def test_magic_is_riff(self, wav_format):
+    def test_magic_is_riff(self, wav_format: WavFormat):
         """magic - RIFF."""
         assert wav_format.magic == b"RIFF"

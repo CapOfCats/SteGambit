@@ -11,8 +11,9 @@ from pathlib import Path
 
 import pytest
 
+from stegambit.core.exceptions import CompatibilityError
 from stegambit.models.dto import StegoTaskRequest, QualityStatus
-from stegambit.services.stego_service import StegoService, CompatibilityError
+from stegambit.services.stego_service import StegoService
 
 
 @pytest.mark.smoke
