@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import tempfile
+import shutil
 import jpeglib
 import numpy as np
 
@@ -94,4 +96,13 @@ class JpegFormat:
         if len(container.coef_arrays) == 3:
             container._raw.Cb = container.coef_arrays[1]
             container._raw.Cr = container.coef_arrays[2]
-        container._raw.write_dct(str(path))
+
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            container._raw.write_dct(tmp_path)
+            shutil.move(tmp_path, str(path))
+        except Exception:
+            if Path(tmp_path).exists():
+                Path(tmp_path).unlink()
+            raise

@@ -293,8 +293,58 @@ QPushButton#btn_header_action:hover {
     color: #d4d4d4;
 }
 
-"""
+QLabel#lbl_encode_header {
+    color: #888888;
+    font-size: 12px;
+}
 
+QLabel#lbl_step1_pending {
+    color: #888888;
+}
+
+QLabel#lbl_step1_valid {
+    color: #4aaa4a;
+}
+
+QLabel#lbl_step1_invalid {
+    color: #aa4a4a;
+}
+
+QLabel#lbl_pass_match {
+    color: #4aaa4a;
+}
+
+QLabel#lbl_pass_match_row {
+    color: #4aaa4a;
+    font-size: 11px;
+}
+
+QLabel#lbl_prng_hint {
+    color: #666666;
+    font-size: 11px;
+}
+
+QPushButton#btn_toggle_pass {
+    border: 1px solid #4a4a4a;
+    background: #2a2a2a;
+    color: #aaaaaa;
+    border-radius: 3px;
+}
+
+QPushButton#btn_toggle_pass[active="true"] {
+    border: 1px solid #4aaa4a;
+    background: #1a2a1a;
+    color: #4aaa4a;
+    border-radius: 3px;
+}
+
+"""
+STATUS_STYLES = {
+    "idle":    "background-color: #161616; color: #888888;",
+    "ok":      "background-color: #1a2a1a; color: #4aaa4a;",
+    "warning": "background-color: #2a2a1a; color: #aaaa4a;",
+    "error":   "background-color: #2a1a1a; color: #aa4a4a;",
+}
 
 def apply_dark_theme(app) -> None:
     """Применить тёмную тему к QApplication."""

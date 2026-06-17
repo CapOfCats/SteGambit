@@ -14,6 +14,7 @@ import pytest
 from stegambit.core.exceptions import CompatibilityError
 from stegambit.models.dto import StegoTaskRequest, QualityStatus
 from stegambit.services.stego_service import StegoService
+from stegambit.core.exceptions import InvalidFrameError
 
 
 @pytest.mark.smoke
@@ -186,7 +187,7 @@ def test_smoke_wrong_password_fails_extraction(png_medium, payload_tiny, tmp_pat
         password="wrong_password",
     )
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(InvalidFrameError):
         service.extract_data(extract_request)
 
 
