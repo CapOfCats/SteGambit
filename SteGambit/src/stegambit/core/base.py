@@ -50,37 +50,111 @@ class IStegoProcessor(ABC, Generic[T]):
 
 
 class ISpreader(ABC):
-    """Контракт генератора координат внедрения (ADR 005)."""
+    """Контракт генератора координат внедрения payload в контейнер.
+
+    Реализация определяет стратегию выбора позиций — равномерную, content-aware
+    (по edge detection), частотно-ограниченную (для DCT) и т.д. Контракт
+    одинаков для всех вариантов: вход — контейнер + длина payload + пароль,
+    выход — массив координат.
+
+    Note:
+        Все реализации должны быть детерминированными: один и тот же пароль
+        на одном и том же контейнере даёт ту же последовательность координат.
+        Это критично для корректной работы extract.
+    """
 
     @abstractmethod
     def get_max_capacity_bits(self, container: np.ndarray) -> int:
-        """Размер пула безопасных координат после edge detection."""
+        """Возвращает доступную ёмкость контейнера в битах.
+
+        Считается ПОСЛЕ применения всех фильтров (edge-detection, маски и пр.),
+        поэтому отражает реальное число позиций, а не геометрический размер.
+
+        Args:
+            container: Любой ndarray-контейнер (RGB image, audio samples).
+
+        Returns:
+            Число свободных позиций в пуле координат.
+        """
         ...
 
     @abstractmethod
     def generate_coords(self, container: np.ndarray, payload_bits_len: int, password_seed: str,
                         exclude_coords: Optional[Set[int]] = None) -> np.ndarray:
-        """Выдать payload_bits_len flat-индексов из пула.
+        """Возвращает payload_bits_len flat-индексов в `container.flat`.
 
-        exclude_coords — задел на Plausible Deniability (ADR 004, IS_DECOY). """
+        Args:
+            container:        Контейнер-носитель.
+            payload_bits_len: Сколько координат нужно (= число бит в payload).
+            password_seed:    Пароль для детерминированной перестановки.
+            exclude_coords:   Координаты, исключаемые из пула — задел на
+                              Plausible Deniability (ADR 004, флаг IS_DECOY).
+                              При extract decoy эти позиции должны быть
+                              запрещены для реального payload.
+
+        Returns:
+            1D ndarray длины payload_bits_len с flat-индексами.
+
+        Raises:
+            ValueError: Если пул после фильтрации меньше payload_bits_len.
+        """
         pass
 
 
 class FileFormat(ABC):
-    """Базовый класс для форматов файлов"""
-    
+    """Базовый интерфейс для контейнеров-носителей (PNG, WAV, JPEG, ...).
+
+    Каждая реализация инкапсулирует:
+        * Magic bytes для идентификации формата (см. FormatIdentifier).
+        * Декодирование файла в numpy-представление, удобное для embed/extract.
+        * Сериализацию модифицированного представления обратно на диск
+          БЕЗ потерь относительно исходного формата (анти-конверсия, ADR 003).
+
+    Note:
+        Для форматов, где numpy-массива недостаточно (например, JPEG нужен
+        целый набор коэф-таблиц + кватаблицы), реализация возвращает
+        собственный контейнерный объект (JpegContainer). В таком случае
+        возврат типизирован как ndarray для общего интерфейса, но фактически
+        это конкретный контейнер.
+    """
+
     @property
     @abstractmethod
     def magic(self) -> bytes:
-        """Magic bytes, маркер для определения типа файла"""
-        pass
-    
+        """Magic bytes-маркер для идентификации формата по сырому потоку байт.
+
+        Returns:
+            Префикс файла, уникальный для данного формата. Используется
+            FormatIdentifier для определения типа до открытия файла.
+        """
+        ...
+
     @abstractmethod
     def load(self, path: Path) -> np.ndarray:
-        """Загрузить файл в numpy array"""
-        pass
-    
+        """Декодирует файл в numpy-представление.
+
+        Args:
+            path: Абсолютный путь к существующему файлу.
+
+        Returns:
+            ndarray (или контейнерный объект для сложных форматов),
+            готовый к передаче в стего-процессор.
+
+        Raises:
+            FileNotFoundError:     Файл не найден.
+            CorruptedCarrierError: Файл повреждён или не соответствует формату.
+        """
+        ...
+
     @abstractmethod
     def save(self, data: np.ndarray, path: Path) -> None:
-        """Сохранить array в файл"""
-        pass
+        """Сериализует numpy-представление обратно в файл.
+
+        Args:
+            data: Контейнер после embed/extract.
+            path: Путь сохранения. Расширение должно соответствовать формату.
+
+        Raises:
+            OSError: Если запись на диск невозможна (нет прав, нет места).
+        """
+        ...

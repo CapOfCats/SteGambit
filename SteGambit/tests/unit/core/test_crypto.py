@@ -9,9 +9,9 @@ import struct
 
 import pytest
 
+from stegambit.core.exceptions import InvalidFrameError
 from stegambit.core.crypto.engine import (
     CryptoEngine,
-    InvalidFrameError,
     FrameLayout,
     Flags,
 )

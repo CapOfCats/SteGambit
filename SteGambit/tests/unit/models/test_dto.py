@@ -19,10 +19,15 @@ from stegambit.models.dto import (
 
 @pytest.fixture
 def request_base_kwargs(tmp_path):
+    """Создаёт временные файлы для прохождения валидации __post_init__."""
+    carrier = tmp_path / "carrier.png"
+    payload = tmp_path / "payload.txt"
+    carrier.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)  # mock
+    payload.write_text("secret data")
     return {
-        "carrier_path": tmp_path / "carrier.png",
-        "payload_path": tmp_path / "payload.txt",
-        "output_path": tmp_path / "stego.png",
+        "carrier_path": carrier,
+        "payload_path": payload,
+        "output_path": tmp_path / "stego.png",  # parent существует, сам файл - нет
         "password": "secret",
     }
 
@@ -65,20 +70,62 @@ class TestQualityStatus:
 
 
 class TestStegoTaskRequest:
-    """Тестирование модели класса стего-запроса."""
-    
-    def test_creation_with_default_algorithm(self, request_base_kwargs):
-        """Минимальный набор полей — algorithm подставляется default 'LSB'."""
-        req = StegoTaskRequest(**request_base_kwargs)
-        assert req.algorithm == "LSB"
-        assert req.password == "secret"
+    """Тестирование модели класса стего-запроса с валидацией в __post_init__."""
 
-    def test_creation_with_explicit_algorithm(self, request_base_kwargs):
-        req = StegoTaskRequest(**request_base_kwargs, algorithm="DCT")
-        assert req.algorithm == "DCT"
+    def test_creation_with_valid_kwargs(self, request_base_kwargs):
+        """Happy path: все поля валидны - DTO создаётся."""
+        req = StegoTaskRequest(**request_base_kwargs)
+        assert req.password == "secret"
+        assert req.carrier_path.exists()
+        assert req.payload_path.exists()
+
+    def test_paths_are_resolved_to_absolute(self, request_base_kwargs):
+        """Пути нормализуются к абсолютным."""
+        req = StegoTaskRequest(**request_base_kwargs)
+        assert req.carrier_path.is_absolute()
+        assert req.payload_path.is_absolute()
+        assert req.output_path.is_absolute()
+
+    def test_empty_password_is_allowed(self, request_base_kwargs):
+        """Пустой пароль допустим и используется в analyze_capacity."""
+        request_base_kwargs["password"] = ""
+        req = StegoTaskRequest(**request_base_kwargs)
+        assert req.password == ""
+
+    def test_missing_carrier_raises(self, request_base_kwargs, tmp_path):
+        """Негативный кейз: carrier_path не существует - FileNotFoundError."""
+        request_base_kwargs["carrier_path"] = tmp_path / "ghost.png"
+        with pytest.raises(FileNotFoundError, match="Carrier not found"):
+            StegoTaskRequest(**request_base_kwargs)
+
+    def test_missing_payload_raises(self, request_base_kwargs, tmp_path):
+        """Негативный кейз: payload_path не существует - FileNotFoundError."""
+        request_base_kwargs["payload_path"] = tmp_path / "ghost.txt"
+        with pytest.raises(FileNotFoundError, match="Payload not found"):
+            StegoTaskRequest(**request_base_kwargs)
+
+    def test_carrier_is_directory_raises(self, request_base_kwargs, tmp_path):
+        """Негативный кейз: carrier - директория, не файл - ValueError."""
+        a_dir = tmp_path / "some_dir"
+        a_dir.mkdir()
+        request_base_kwargs["carrier_path"] = a_dir
+        with pytest.raises(ValueError, match="Carrier is not a file"):
+            StegoTaskRequest(**request_base_kwargs)
+
+    def test_output_parent_missing_raises(self, request_base_kwargs, tmp_path):
+        """Негативный кейз: родитель output_path не существует - FileNotFoundError."""
+        request_base_kwargs["output_path"] = tmp_path / "ghost_dir" / "out.png"
+        with pytest.raises(FileNotFoundError, match="Output directory does not exist"):
+            StegoTaskRequest(**request_base_kwargs)
+
+    def test_non_string_password_raises(self, request_base_kwargs):
+        """Негативный кейз: пароль не строка - TypeError."""
+        request_base_kwargs["password"] = 12345
+        with pytest.raises(TypeError, match="Password must be str"):
+            StegoTaskRequest(**request_base_kwargs)
 
     def test_frozen_blocks_field_mutation(self, request_base_kwargs):
-        """Негативный: попытка изменить поле frozen-dataclass -> FrozenInstanceError."""
+        """Негативный кейз: попытка изменить поле frozen-dataclass - FrozenInstanceError."""
         req = StegoTaskRequest(**request_base_kwargs)
         with pytest.raises(FrozenInstanceError):
             req.password = "new_password"

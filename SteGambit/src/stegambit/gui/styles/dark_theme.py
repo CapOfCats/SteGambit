@@ -250,6 +250,49 @@ QPushButton#btn_metrics_toggle:hover {
     background-color: #333333;
     border-color: #6a6a6a;
 }
+
+QMessageBox {
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+}
+
+QMessageBox QLabel {
+    color: #d4d4d4;
+}
+
+QMessageBox QPushButton {
+    min-width: 60px;
+    padding: 4px 16px;
+}
+
+QMessageBox QTextEdit {
+    background-color: #141414;
+    color: #888888;
+    border: 1px solid #3a3a3a;
+}
+
+QWidget#header_bar {
+    background-color: #161616;
+    border-bottom: 1px solid #3a3a3a;
+}
+
+QLabel#lbl_header_title {
+    color: #888888;
+    font-size: 12px;
+}
+
+QPushButton#btn_header_action {
+    border: none;
+    color: #aaaaaa;
+    background: transparent;
+    font-size: 13px;
+    padding: 2px 8px;
+}
+
+QPushButton#btn_header_action:hover {
+    color: #d4d4d4;
+}
+
 """
 
 

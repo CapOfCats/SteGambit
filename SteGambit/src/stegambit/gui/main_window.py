@@ -5,16 +5,17 @@ from PyQt6.QtWidgets import (
     QHBoxLayout, QLabel
 )
 from pathlib import Path
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QIcon
+from PyQt6.QtCore import Qt, QTimer, QUrl
+from PyQt6.QtGui import QDesktopServices
 
+from stegambit.core.exceptions import CompatibilityError
+from stegambit.infrastructure.stegano_logger import get_log_path
 from stegambit.models.dto import StegoTaskRequest
 from stegambit.services.async_worker import StegoWorker
 from stegambit.services.stego_service import StegoService
 from stegambit.models.dto import (
     StegoTaskRequest, StegoResponse, CapacityReport, QualityStatus
 )
-from stegambit.services.stego_service import CompatibilityError
 from .widgets.metrics_panel import MetricsData
 from .widgets.encode_panel import EncodePanel
 from .widgets.decode_panel import DecodePanel
@@ -89,26 +90,26 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
 
     def _build_header(self) -> QWidget:
-        """Верхняя полоска с кнопкой Settings (имитирует titlebar из макета)."""
         header = QWidget()
         header.setFixedHeight(36)
-        header.setStyleSheet(
-            "background-color: #161616; border-bottom: 1px solid #3a3a3a;"
-        )
+        header.setObjectName("header_bar")
         h_layout = QHBoxLayout(header)
         h_layout.setContentsMargins(10, 0, 10, 0)
 
         lbl_title = QLabel("[ 🔒 ] SteGambit")
-        lbl_title.setStyleSheet("color: #888888; font-size: 12px;")
+        lbl_title.setObjectName("lbl_header_title")
         h_layout.addWidget(lbl_title)
 
         h_layout.addStretch()
 
+        self.btn_open_log = QPushButton("📜 Open Log")
+        self.btn_open_log.setObjectName("btn_header_action")
+        self.btn_open_log.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_open_log.setToolTip("Открыть файл логов в системном просмотрщике")
+        h_layout.addWidget(self.btn_open_log)
+
         self.btn_settings = QPushButton("⚙ Settings")
-        self.btn_settings.setStyleSheet(
-            "border: none; color: #aaaaaa; background: transparent;"
-            "font-size: 13px; padding: 2px 8px;"
-        )
+        self.btn_settings.setObjectName("btn_header_action")
         self.btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
         h_layout.addWidget(self.btn_settings)
 
@@ -119,12 +120,34 @@ class MainWindow(QMainWindow):
         self.encode_panel.request_check.connect(self._on_check_compatibility)
         self.encode_panel.request_hide.connect(self._on_hide_requested)
         self.decode_panel.request_extract.connect(self._on_extract_requested)
+        self.btn_open_log.clicked.connect(self._open_log_file)
 
     def _open_settings(self):
         dlg = SettingsDialog(self._settings, parent=self)
         if dlg.exec():
             self._settings = dlg.get_settings()
             self._set_status("Settings saved.")
+    
+    def _open_log_file(self):
+        """Открывает stegambit.log в системном просмотрщике."""
+        log_path = get_log_path()
+        if log_path is None or not log_path.exists():
+            QMessageBox.information(
+                self,
+                "SteGambit - Open Log",
+                "Лог-файл ещё не создан. Перезапустите приложение или дождитесь "
+                "первой записи в лог."
+            )
+            return
+
+        url = QUrl.fromLocalFile(str(log_path))
+        if not QDesktopServices.openUrl(url):
+            QMessageBox.warning(
+                self,
+                "SteGambit - Open Log",
+                f"Не удалось открыть файл:\n{log_path}\n\n"
+                "Откройте его вручную в файловом менеджере."
+        )
 
     def _on_check_compatibility(self):
         """Проверка совместимости через StegoService.analyze_capacity()."""
@@ -136,13 +159,17 @@ class MainWindow(QMainWindow):
             return
 
         self._set_status("Checking compatibility...")
-
-        request = StegoTaskRequest(
-            carrier_path=cover,
-            payload_path=payload,
-            output_path=cover,
-            password="",  
-        )
+        try:
+            request = StegoTaskRequest(
+                carrier_path=cover,
+                payload_path=payload,
+                output_path=cover,
+                password="",  
+            )
+        except (FileNotFoundError, ValueError, TypeError) as e:
+            self._set_status(f"Ошибка: {e}")
+            QMessageBox.warning(self, "SteGambit - Неверные параметры", str(e))
+            return
 
         try:
             report: CapacityReport = self._service.analyze_capacity(request)
@@ -243,13 +270,17 @@ class MainWindow(QMainWindow):
 
         self._set_status(f"Processing... | Output: {result.output_path.name}")
         self._start_fake_progress("Encrypting payload...")
-
-        request = StegoTaskRequest(
-            carrier_path=cover,
-            payload_path=payload,
-            output_path=result.output_path,
-            password=result.password,
-        )
+        try:
+            request = StegoTaskRequest(
+                carrier_path=cover,
+                payload_path=payload,
+                output_path=result.output_path,
+                password=result.password,
+            )
+        except (FileNotFoundError, ValueError, TypeError) as e:
+            self._set_status(f"Ошибка: {e}")
+            QMessageBox.warning(self, "SteGambit - Неверные параметры", str(e))
+            return
 
         self._worker = self._create_worker(request, mode="encode")
         self._worker.finished.connect(self._on_encode_finished)
@@ -350,19 +381,20 @@ class MainWindow(QMainWindow):
         if not output_dir:
             self._set_status("Папка для сохранения не выбрана.")
             return
-        if not password:
-            self._set_status("Введите пароль.")
-            return
 
         output_path = Path(output_dir) / f"extracted_{stego.stem}.bin"
         self._set_status("Extracting...")
-
-        request = StegoTaskRequest(
-            carrier_path=stego,
-            payload_path=stego,
-            output_path=output_path,
-            password=password,
-        )
+        try:
+            request = StegoTaskRequest(
+                carrier_path=stego,
+                payload_path=stego,
+                output_path=output_path,
+                password=password,
+            )
+        except (FileNotFoundError, ValueError, TypeError) as e:
+            self._set_status(f"Ошибка: {e}")
+            QMessageBox.warning(self, "SteGambit — Неверные параметры", str(e))
+            return
 
         self._worker = self._create_worker(request, mode="decode")
         self._worker.finished.connect(self._on_decode_finished)
@@ -389,7 +421,8 @@ class MainWindow(QMainWindow):
             self._set_status(f"Извлечено в {response.output_path.name}")
         else:
             self.decode_panel.set_log(f"Ошибка: {response.error}")
-            self._set_status(f"Ошибка: {response.error}")
+            self._show_decode_error_dialog(response.error or "Неизвестная ошибка.")
+            self._set_status("Не удалось извлечь данные - см. диалог.")
     
     
     def _on_worker_error(self, message: str):
@@ -404,11 +437,28 @@ class MainWindow(QMainWindow):
         self._set_status(f"Critical error — see dialog")
 
     def _is_worker_running(self) -> bool:
-        return self._worker is not None and self._worker.isRunning()
+        if self._worker is None:
+            return False
+        try:
+            return self._worker.isRunning()
+        except RuntimeError:
+            # Если объект воркера убили, удаляем ссылку и больше никогда в жизни к ней не возвращаемся!
+            self._worker = None
+            return False
+    
+    def _clear_worker_reference(self):
+        """Обнуляет ссылку на воркер - это для сигналов finished/error.
+        Здесь только исключительно флаш Python-ссылки.
+        """
+        self._worker = None
 
     def _create_worker(self, request: StegoTaskRequest, mode: str) -> StegoWorker:
+        """Подушка безопасности для удаленного потока, исключаем RuntimeError посреди работы."""
         worker = StegoWorker(request, mode=mode)
         worker.finished.connect(worker.deleteLater)
+        worker.finished.connect(self._clear_worker_reference)
+        worker.error.connect(worker.deleteLater)
+        worker.error.connect(self._clear_worker_reference)
         return worker
 
     def _set_controls_enabled(self, enabled: bool):
@@ -426,49 +476,27 @@ class MainWindow(QMainWindow):
         dlg = QMessageBox(self)
         dlg.setWindowTitle("SteGambit — Capacity Error")
         dlg.setIcon(QMessageBox.Icon.Warning)
-
-        dlg.setText(
-            "Контейнеру не достаёт емкости для сокрытия выбранного файла."
-        )
+        dlg.setText("Контейнеру не достаёт емкости для сокрытия выбранного файла.")
         dlg.setInformativeText(
             "В контейнере не хватает достаточного кол-ва 'шумных' пикселей "
             "для граничного распределения (порога незаметности).\n\n"
             "Что делать?:\n"
-            "  • Другой 'носитель', желательно - потяжелее\n"
-            "  • Уменьшить скрываемую нагрузку \n"
+            "  • Другой 'носитель', желательно — потяжелее\n"
+            "  • Уменьшить скрываемую нагрузку"
         )
-
         dlg.setDetailedText(message)
-
         dlg.setStandardButtons(QMessageBox.StandardButton.Ok)
         dlg.setDefaultButton(QMessageBox.StandardButton.Ok)
-
-        dlg.setStyleSheet("""
-            QMessageBox {
-                background-color: #1e1e1e;
-                color: #d4d4d4;
-            }
-            QMessageBox QLabel {
-                color: #d4d4d4;
-            }
-            QPushButton {
-                background-color: #2a2a2a;
-                color: #d4d4d4;
-                border: 1px solid #4a4a4a;
-                padding: 4px 16px;
-                min-width: 60px;
-            }
-            QPushButton:hover {
-                background-color: #3a3a3a;
-                border-color: #6a6a6a;
-            }
-            QTextEdit {
-                background-color: #141414;
-                color: #888888;
-                border: 1px solid #3a3a3a;
-            }
-        """)
-
+        dlg.exec()
+    
+    def _show_decode_error_dialog(self, message: str):
+        """Показывает попап с понятной ошибкой при decode."""
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("SteGambit — Не удалось извлечь данные")
+        dlg.setIcon(QMessageBox.Icon.Warning)
+        dlg.setText("Не удалось извлечь скрытые данные из файла.")
+        dlg.setInformativeText(message)
+        dlg.setStandardButtons(QMessageBox.StandardButton.Ok)
         dlg.exec()
 
 
@@ -484,3 +512,10 @@ class MainWindow(QMainWindow):
         self._set_status(
             f"Processing complete. | Time Elapsed: {data.time_sec:.2f}s | Version AlphaCentavra"
         )
+
+    def closeEvent(self, event):
+        """Корректно завершает работу: ждёт окончания воркера перед закрытием."""
+        if self._is_worker_running():
+            self._set_status("Waiting for current operation to finish...")
+            self._worker.wait(3000)  # таймаут пока, мб оставлю
+        super().closeEvent(event)

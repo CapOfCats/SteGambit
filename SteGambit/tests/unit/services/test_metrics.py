@@ -11,6 +11,7 @@
 import numpy as np
 import pytest
 
+from stegambit.core.exceptions import CompatibilityError
 from stegambit.models.dto import (
     StegoTaskRequest,
     CapacityReport,
@@ -22,7 +23,7 @@ from stegambit.services.analytics.metrics import (
     evaluate_quality,
     PSNR_OK_THRESHOLD,
 )
-from stegambit.services.stego_service import StegoService, CompatibilityError
+from stegambit.services.stego_service import StegoService
 
 
 class TestSSIM:

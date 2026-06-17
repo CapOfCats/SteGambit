@@ -11,18 +11,26 @@ from typing import Any
 import jpeglib
 import numpy as np
 
+from stegambit.core.exceptions import CorruptedCarrierError
+
 
 @dataclass
 class JpegContainer:
     """JPEG-состояние, достаточное для lossless round-trip через jpeglib.
 
+    JPEG не вписывается в ndarray-модель FileFormat, поэтому используется
+    собственный контейнер: коэффициенты + размеры + сырой jpeglib-объект
+    для финальной записи через сохранённые таблицы квантования и Хаффмана.
+
     Attributes:
         coef_arrays: Квантованные DCT-коэффициенты по каналам (обычно Y, Cb, Cr).
                      Каждый элемент — ndarray shape=(Hb, Wb, 8, 8), dtype=int16.
-                     Модифицируются на месте в DctProcessor.
-        dimensions:  (H, W) исходного изображения в пикселях — для удобства.
-        _raw:        Внутренний jpeglib.DCTJPEG. Хранит таблицы квантования
-                     и Хаффмана; используется для записи через write_dct().
+                     Модифицируются IN-PLACE в DctProcessor.
+        dimensions:  (H, W) исходного изображения в пикселях — справочно.
+        _raw:        ВНУТРЕННИЙ jpeglib.DCTJPEG. Хранит таблицы квантования
+                     и Хаффмана; используется JpegFormat.save() для записи
+                     через write_dct(). НЕ модифицировать снаружи — нарушит
+                     инвариант "перекодирование без потерь".
     """
     coef_arrays: list[np.ndarray]
     dimensions: tuple[int, int]
@@ -47,10 +55,19 @@ class JpegFormat:
 
         Raises:
             FileNotFoundError: Если файл не существует.
-            RuntimeError: Если jpeglib не смог распарсить файл.
+            CorruptedCarrierError: Если jpeglib не смог распарсить файл.
         """
-        raw = jpeglib.read_dct(str(path))
-        # jpeglib возвращает Y, Cb, Cr как отдельные атрибуты.
+        if not path.exists():
+            raise FileNotFoundError(f"JPEG-файл не найден: {path}")
+
+        try:
+            raw = jpeglib.read_dct(str(path))
+        except Exception as e:
+            raise CorruptedCarrierError(
+                f"Не удалось прочитать JPEG-файл '{path.name}'. "
+                f"Возможно, файл повреждён, не является JPEG или содержит неподдерживаемый цветовой профиль."
+            ) from e
+
         coef_arrays = [raw.Y]
         if raw.Cb is not None and raw.Cr is not None:
             coef_arrays.extend([raw.Cb, raw.Cr])
@@ -58,10 +75,19 @@ class JpegFormat:
         return JpegContainer(coef_arrays=coef_arrays, dimensions=(h, w), _raw=raw)
 
     def save(self, container: JpegContainer, path: Path) -> None:
-        """Записывает модифицированные коэффициенты обратно в JPEG.
+        """Записывает модифицированные коэффициенты обратно в JPEG-файл.
 
-        Использует исходные таблицы квантования и Хаффмана — перекодирования
-        пикселей не происходит, payload не теряется.
+        Использует ИСХОДНЫЕ таблицы квантования и Хаффмана из container._raw —
+        перекодирования пикселей не происходит, payload не теряется.
+
+        Args:
+            container: JpegContainer после embed/extract.
+            path:      Путь сохранения с расширением .jpg/.jpeg.
+
+        Note:
+            Метод обращается к container._raw напрямую — это намеренный
+            tight coupling JpegFormat и JpegContainer (см. TODO #25:
+            возможный рефактор через write_back() метод на самом контейнере).
         """
         # Синхронизируем обратно возможно-модифицированные каналы.
         container._raw.Y = container.coef_arrays[0]

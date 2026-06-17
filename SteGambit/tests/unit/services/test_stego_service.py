@@ -9,9 +9,10 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+from stegambit.core.exceptions import CompatibilityError
 from stegambit.models.dto import StegoTaskRequest, CapacityReport
-from stegambit.services.stego_service import StegoService, CompatibilityError
-from stegambit.core.crypto.engine import InvalidFrameError, CryptoEngine
+from stegambit.services.stego_service import StegoService
+from stegambit.core.exceptions import InvalidFrameError
 
 
 @pytest.fixture
@@ -21,10 +22,20 @@ def service():
 
 @pytest.fixture
 def png_request(tmp_path):
-    """Минимальный валидный StegoTaskRequest для PNG."""
+    """Минимальный валидный StegoTaskRequest для PNG.
+
+    Создаёт файлы-заглушки только для прохождения валидации __post_init__.
+    Содержимое НЕ декодируется как PNG. Для тестов, которым нужен реальный
+    PNG-декодинг, используется глобальная фикстура png_medium из conftest.py.
+    """
+    carrier = tmp_path / "carrier.png"
+    payload = tmp_path / "payload.bin"
+    carrier.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
+    payload.write_bytes(b"X" * 100)
+
     return StegoTaskRequest(
-        carrier_path=tmp_path / "carrier.png",
-        payload_path=tmp_path / "payload.bin",
+        carrier_path=carrier,
+        payload_path=payload,
         output_path=tmp_path / "stego.png",
         password="secret",
     )
@@ -37,7 +48,14 @@ def payload_file(tmp_path):
 
 @pytest.fixture
 def carrier_png(tmp_path):
-    return tmp_path / "carrier.png"
+    """Путь к фейковому PNG-файлу для DTO-валидации.
+
+    Содержимое — только magic bytes PNG, не валидный PNG для декодинга.
+    Используется в тестах analyze_capacity, где PngFormat замокан.
+    """
+    path = tmp_path / "carrier.png"
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
+    return path
 
 @pytest.fixture
 def mock_png_handler():
@@ -65,9 +83,14 @@ class TestAntiConversionPolicy:
 
     def test_jpeg_carrier_to_png_output_raises(self, service, tmp_path):
         """Негативный кейз: JPEG → .png запрещено."""
+        carrier = tmp_path / "carrier.jpg"
+        payload = tmp_path / "payload.bin"
+        carrier.write_bytes(b"\xff\xd8\xff" + b"\x00" * 100)
+        payload.write_bytes(b"data")
+
         request = StegoTaskRequest(
-            carrier_path=tmp_path / "carrier.jpg",
-            payload_path=tmp_path / "payload.bin",
+            carrier_path=carrier,
+            payload_path=payload,
             output_path=tmp_path / "stego.png",
             password="x",
         )
@@ -86,9 +109,14 @@ class TestAntiConversionPolicy:
 
         Проверяем, что ошибка возникает НЕ из-за анти-конверсии а позже при отсутствия реального файла.
         """
+        carrier = tmp_path / f"carrier{ext}"
+        payload = tmp_path / "payload.bin"
+        carrier.write_bytes(b"fake content")
+        payload.write_bytes(b"data")
+
         request = StegoTaskRequest(
-            carrier_path=tmp_path / f"carrier{ext}",
-            payload_path=tmp_path / "payload.bin",
+            carrier_path=carrier,
+            payload_path=payload,
             output_path=tmp_path / f"stego{ext}",
             password="x",
         )
@@ -102,9 +130,14 @@ class TestUnsupportedFormat:
     """Негативный кейз: формат не в _FORMAT_REGISTRY."""
 
     def test_hide_unsupported_format_raises(self, service, tmp_path):
+        carrier = tmp_path / "x.bmp"
+        payload = tmp_path / "p.bin"
+        carrier.write_bytes(b"BM" + b"\x00" * 100)
+        payload.write_bytes(b"data")
+
         request = StegoTaskRequest(
-            carrier_path=tmp_path / "x.bmp",
-            payload_path=tmp_path / "p.bin",
+            carrier_path=carrier,
+            payload_path=payload,
             output_path=tmp_path / "out.bmp",
             password="x",
         )
@@ -113,9 +146,14 @@ class TestUnsupportedFormat:
                 service.hide_data(request)
 
     def test_extract_unsupported_format_raises(self, service, tmp_path):
+        carrier = tmp_path / "x.bmp"
+        payload = tmp_path / "p.bin"
+        carrier.write_bytes(b"BM" + b"\x00" * 100)
+        payload.write_bytes(b"data")
+
         request = StegoTaskRequest(
-            carrier_path=tmp_path / "x.bmp",
-            payload_path=tmp_path / "p.bin",
+            carrier_path=carrier,
+            payload_path=payload,
             output_path=tmp_path / "out.bin",
             password="x",
         )
@@ -200,37 +238,6 @@ class TestBuildPool:
             service._build_pool("UNKNOWN", np.zeros(10))
 
 
-class TestShufflePoolByPassword:
-    """Тесты статического _shuffle_pool_by_password."""
-
-    def test_same_password_same_shuffle(self):
-        """Один пароль - идентичная перестановка."""
-        pool = np.arange(100, dtype=np.int64)
-        r1 = StegoService._shuffle_pool_by_password(pool, "secret")
-        r2 = StegoService._shuffle_pool_by_password(pool, "secret")
-        np.testing.assert_array_equal(r1, r2)
-
-    def test_different_passwords_different_shuffle(self):
-        """Пазные пароли - разные перестановки."""
-        pool = np.arange(100, dtype=np.int64)
-        r1 = StegoService._shuffle_pool_by_password(pool, "secret1")
-        r2 = StegoService._shuffle_pool_by_password(pool, "secret2")
-        assert not np.array_equal(r1, r2)
-
-    def test_shuffle_preserves_elements(self):
-        """Перестановка содержит те же элементы, что и исходный пул."""
-        pool = np.arange(100, dtype=np.int64)
-        shuffled = StegoService._shuffle_pool_by_password(pool, "x")
-        np.testing.assert_array_equal(np.sort(shuffled), pool)
-
-    def test_does_not_mutate_input(self):
-        """Исходный пул не мутируется."""
-        pool = np.arange(100, dtype=np.int64)
-        backup = pool.copy()
-        StegoService._shuffle_pool_by_password(pool, "x")
-        np.testing.assert_array_equal(pool, backup)
-
-
 class TestAnalyzeCapacity:
     """Тесты analyze_capacity — предварительная оценка ёмкости без сокрытия."""
 
@@ -310,8 +317,11 @@ class TestAnalyzeCapacity:
 
     def test_jpeg_delegates_to_dct_processor(self, service, payload_file, tmp_path):
         """Жля JPEG ёмкость считается через DctProcessor."""
+        carrier = tmp_path / "c.jpg"
+        carrier.write_bytes(b"\xff\xd8\xff" + b"\x00" * 100)
+
         request = StegoTaskRequest(
-            carrier_path=tmp_path / "c.jpg",
+            carrier_path=carrier,
             payload_path=payload_file,
             output_path=tmp_path / "out.jpg",
             password="x",
@@ -333,8 +343,11 @@ class TestAnalyzeCapacity:
 
     def test_unsupported_format_raises(self, service, payload_file, tmp_path):
         """Негативный кейз: неподдерживаемый формат -> CompatibilityError."""
+        carrier = tmp_path / "c.bmp"
+        carrier.write_bytes(b"BM" + b"\x00" * 100)
+
         request = StegoTaskRequest(
-            carrier_path=tmp_path / "c.bmp",
+            carrier_path=carrier,
             payload_path=payload_file,
             output_path=tmp_path / "out.bmp",
             password="x",

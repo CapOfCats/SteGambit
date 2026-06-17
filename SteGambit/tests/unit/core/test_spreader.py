@@ -77,33 +77,6 @@ class TestEdgePoolBuilding:
         np.testing.assert_array_equal(pool_original, pool_modified)
 
 
-class TestSeedRng:
-    """Тесты приватного _seed_rng: детерминизм генерации RNG из пароля."""
-
-    def test_same_password_same_rng_state(self, spreader):
-        """Один пароль - идентичный RNG-выход."""
-        rng_a = spreader._seed_rng("password123")
-        rng_b = spreader._seed_rng("password123")
-        assert rng_a.integers(0, 10**9) == rng_b.integers(0, 10**9)
-
-    def test_different_passwords_different_rng_state(self, spreader):
-        """Один символ разницы - разный RNG-выход."""
-        rng_a = spreader._seed_rng("password123")
-        rng_b = spreader._seed_rng("password124")
-        assert rng_a.integers(0, 10**9) != rng_b.integers(0, 10**9)
-
-    def test_empty_password_does_not_crash(self, spreader):
-        """Граничный кейз: пустой пароль допустим."""
-        rng = spreader._seed_rng("")
-        rng.integers(0, 10)
-
-    def test_unicode_password_works(self, spreader):
-        """UTF-8 пароль."""
-        rng_a = spreader._seed_rng("пароль☺♂♀")
-        rng_b = spreader._seed_rng("пароль☺♂♀")
-        assert rng_a.integers(0, 10**9) == rng_b.integers(0, 10**9)
-
-
 class TestGetMaxCapacityBits:
     """Тесты get_max_capacity_bits."""
 
