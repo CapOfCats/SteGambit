@@ -12,9 +12,6 @@ import pytest
 from stegambit.core.formats.wav import WavFormat
 
 
-ARTIFACTS = Path(__file__).resolve().parents[2] / "artifacts" / "carriers"
-
-
 @pytest.fixture
 def wav_format():
     return WavFormat()
@@ -23,19 +20,19 @@ def wav_format():
 @pytest.mark.io
 class TestLoad:
 
-    def test_load_returns_ndarray(self, wav_format):
+    def test_load_returns_ndarray(self, wav_format, wav_carrier):
         """load возвращает np.ndarray."""
-        arr = wav_format.load(ARTIFACTS / "music.wav")
+        arr = wav_format.load(wav_carrier)
         assert isinstance(arr, np.ndarray)
 
-    def test_load_dtype_is_int16(self, wav_format):
+    def test_load_dtype_is_int16(self, wav_format, wav_carrier):
         """WAV семплы — int16 (контракт нашего пайплайна)."""
-        arr = wav_format.load(ARTIFACTS / "music.wav")
+        arr = wav_format.load(wav_carrier)
         assert arr.dtype == np.int16
 
-    def test_load_is_1d(self, wav_format):
+    def test_load_is_1d(self, wav_format, wav_carrier):
         """Cемплы возвращаются как 1D-массив."""
-        arr = wav_format.load(ARTIFACTS / "music.wav")
+        arr = wav_format.load(wav_carrier)
         assert arr.ndim == 1
 
     def test_load_missing_file_raises(self, wav_format, tmp_path):
