@@ -29,6 +29,8 @@ class StegoTaskRequest:
         * payload_path - должен существовать и быть файлом.
         * output_path  - родительская директория должна существовать.
         * password     - допустима пустая строка.
+        * compute_visual_metrics - флаг для опционального расчёта SSIM
+          (тяжёлая метрика, ~1.5s на 2MB PNG). По умолчанию выключен.
 
     Пути нормализуются через Path(...).resolve().
 
@@ -41,6 +43,8 @@ class StegoTaskRequest:
     payload_path: Path
     output_path: Path
     password: str
+    compute_visual_metrics: bool = False
+    
 
     def __post_init__(self):
         carrier = Path(self.carrier_path).resolve()

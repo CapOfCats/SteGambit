@@ -126,6 +126,7 @@ class StegoService:
             pre_embed_snapshot=pre_embed_snapshot,
             original_path=request.carrier_path,
             output_path=request.output_path,
+            compute_visual_metrics=request.compute_visual_metrics,
         )
 
         return StegoResponse(
@@ -367,6 +368,7 @@ class StegoService:
         pre_embed_snapshot: np.ndarray | None = None,
         original_path: Path | None = None,
         output_path: Path | None = None,
+        compute_visual_metrics: bool = False,
     ) -> dict:
         """Считает метрики и выполняет sanity-check.
 
@@ -394,7 +396,12 @@ class StegoService:
                     "Проверка внедрения провалена: стего-контейнер идентичен исходному. Информация не была внедрена."
                 )
             metrics["psnr"] = psnr
-            metrics["ssim"] = calculate_ssim(original_arr, stego_arr)
+
+            # SSIM — психовизуальная метрика, опциональна (~1.5s на 2MB PNG).
+            # Считаем только если фронт явно запросил детальный отчёт.
+            # PSNR выше уже выполнил sanity-check, повторно через SSIM не нужно.
+            if compute_visual_metrics:
+                metrics["ssim"] = calculate_ssim(original_arr, stego_arr)
 
         #  DCT sanity-check - без PSNR/SSIM 
         elif processor_kind == "DCT":
