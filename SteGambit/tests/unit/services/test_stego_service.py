@@ -174,11 +174,11 @@ class TestExtractDataErrors:
             mock_registry.__getitem__.return_value = lambda: mock_handler
             mock_registry.__contains__.return_value = True
 
-            with patch.object(service._processor, "extract", return_value=b"\x00" * 57):
-                with patch("stegambit.services.stego_service.SmartSpreader") as mock_spreader:
-                    mock_spreader.return_value.generate_coords.return_value = np.arange(10000, dtype=np.int64)
-                    with pytest.raises(InvalidFrameError, match="MAGIC"):
-                        service.extract_data(png_request)
+            with patch.object(service._processor, "extract", return_value=b"\x00" * 57), \
+                 patch.object(service._lsb_spreader, "generate_coords",
+                              return_value=np.arange(10000, dtype=np.int64)):
+                with pytest.raises(InvalidFrameError, match="MAGIC"):
+                    service.extract_data(png_request)
 
 
 class TestGetAlgorithmForFormat:
@@ -252,8 +252,7 @@ class TestAnalyzeCapacity:
         )
         with patch.object(service._identifier, "identify", return_value="PNG"), \
              patch.dict("stegambit.services.stego_service._FORMAT_REGISTRY", {"PNG": png_cls}), \
-             patch("stegambit.services.stego_service.SmartSpreader") as mock_spreader_cls:
-            mock_spreader_cls.return_value.get_max_capacity_bits.return_value = 80_000
+             patch.object(service._lsb_spreader, "get_max_capacity_bits", return_value=80000):
 
             report = service.analyze_capacity(request)
             assert isinstance(report, CapacityReport)
@@ -269,8 +268,7 @@ class TestAnalyzeCapacity:
         )
         with patch.object(service._identifier, "identify", return_value="PNG"), \
              patch.dict("stegambit.services.stego_service._FORMAT_REGISTRY", {"PNG": png_cls}), \
-             patch("stegambit.services.stego_service.SmartSpreader") as mock_spreader_cls:
-            mock_spreader_cls.return_value.get_max_capacity_bits.return_value = 80_000
+             patch.object(service._lsb_spreader, "get_max_capacity_bits", return_value=80_000):
 
             report = service.analyze_capacity(request)
             assert report.fits is True
@@ -289,8 +287,7 @@ class TestAnalyzeCapacity:
         )
         with patch.object(service._identifier, "identify", return_value="PNG"), \
              patch.dict("stegambit.services.stego_service._FORMAT_REGISTRY", {"PNG": png_cls}), \
-             patch("stegambit.services.stego_service.SmartSpreader") as mock_spreader_cls:
-            mock_spreader_cls.return_value.get_max_capacity_bits.return_value = 100
+             patch.object(service._lsb_spreader, "get_max_capacity_bits", return_value=100):
 
             report = service.analyze_capacity(request)
             assert report.fits is False
@@ -308,15 +305,14 @@ class TestAnalyzeCapacity:
         )
         with patch.object(service._identifier, "identify", return_value="PNG"), \
              patch.dict("stegambit.services.stego_service._FORMAT_REGISTRY", {"PNG": png_cls}), \
-             patch("stegambit.services.stego_service.SmartSpreader") as mock_spreader_cls:
-            mock_spreader_cls.return_value.get_max_capacity_bits.return_value = 0
+             patch.object(service._lsb_spreader, "get_max_capacity_bits", return_value=0):
 
             report = service.analyze_capacity(request)
             assert report.utilization_percent == 0.0
             assert report.fits is False
 
-    def test_jpeg_delegates_to_dct_processor(self, service, payload_file, tmp_path):
-        """Жля JPEG ёмкость считается через DctProcessor."""
+    def test_jpeg_delegates_to_dct_spreader(self, service, payload_file, tmp_path):
+        """Для JPEG ёмкость считается через DctSpreader."""
         carrier = tmp_path / "c.jpg"
         carrier.write_bytes(b"\xff\xd8\xff" + b"\x00" * 100)
 
@@ -333,8 +329,8 @@ class TestAnalyzeCapacity:
 
         with patch.object(service._identifier, "identify", return_value="JPEG"), \
              patch.dict("stegambit.services.stego_service._FORMAT_REGISTRY", {"JPEG": jpeg_cls}), \
-             patch.object(service._dct, "get_embeddable_positions",
-                          return_value=np.arange(50_000, dtype=np.int64)) as mock_get:
+             patch.object(service._dct_spreader, "get_max_capacity_bits",
+                          return_value=50_000) as mock_get:
 
             report = service.analyze_capacity(request)
             mock_get.assert_called_once_with(fake_container)
@@ -369,8 +365,7 @@ class TestAnalyzeCapacity:
         )
         with patch.object(service._identifier, "identify", return_value="PNG"), \
              patch.dict("stegambit.services.stego_service._FORMAT_REGISTRY", {"PNG": png_cls}), \
-             patch("stegambit.services.stego_service.SmartSpreader") as mock_spreader_cls:
-            mock_spreader_cls.return_value.get_max_capacity_bits.return_value = 1_000_000
+             patch.object(service._lsb_spreader, "get_max_capacity_bits", return_value=1_000_000):
 
             report = service.analyze_capacity(request)
             expected = (CryptoEngine.header_size() + 100) * 8
