@@ -14,13 +14,13 @@ from stegambit.core.formats.wav import WavFormat
 from stegambit.core.stego.strategies import DctProcessor, LsbProcessor
 from stegambit.core.crypto.engine import CryptoEngine, FrameLayout
 from stegambit.core.stego.spreader import SmartSpreader
+from stegambit.core.stego.dct_spreader import DctSpreader
 from stegambit.core.exceptions import CompatibilityError
 from stegambit.models.dto import (
     StegoTaskRequest,
     StegoResponse,
     CapacityReport,
 )
-from stegambit.core.common.seeding import shuffle_pool_by_password
 from stegambit.services.analytics.metrics import (
     calculate_psnr,
     calculate_ssim,
@@ -55,6 +55,8 @@ class StegoService:
         self._crypto = CryptoEngine()
         self._processor = LsbProcessor()
         self._dct = DctProcessor()
+        self._lsb_spreader = SmartSpreader()
+        self._dct_spreader = DctSpreader()
 
     def hide_data(self, request: StegoTaskRequest) -> StegoResponse:
         """Выполняет полный пайплайн сокрытия по StegoTaskRequest."""
@@ -97,17 +99,13 @@ class StegoService:
                 f"требуется {required_bits}. Возьмите более крупный носитель или уменьшите payload."
             )
 
-        # 6. Генерация координат. Spreader выбирает конкретные позиции из пула по сиду.
-        if processor_kind == "LSB":
-            spreader = SmartSpreader()
-            coords = spreader.generate_coords(
-                container=original,
-                payload_bits_len=required_bits,
-                password_seed=request.password,
-            )
-        else:
-            
-            coords = shuffle_pool_by_password(pool, request.password)[:required_bits]
+        # 6. Генерация координат. Spreader сам знает, как из своего пула получить детерминированную перестановку под seed.
+        spreader = self._lsb_spreader if processor_kind == "LSB" else self._dct_spreader
+        coords = spreader.generate_coords(
+            container=original,
+            payload_bits_len=required_bits,
+            password_seed=request.password,
+        )
 
         # Снапшот для sanity-check (только DCT — для LSB sanity на PSNR=inf).
         pre_embed_snapshot = None
@@ -183,15 +181,12 @@ class StegoService:
             )
 
         # Spreader с тем же паролем даст те же координаты, что при embed.
-        if processor_kind == "LSB":
-            spreader = SmartSpreader()
-            coords_for_header = spreader.generate_coords(
-                container=stego,
-                payload_bits_len=header_bits,
-                password_seed=request.password,
-            )
-        else:
-            coords_for_header = shuffle_pool_by_password(pool, request.password)[:header_bits]
+        spreader = self._lsb_spreader if processor_kind == "LSB" else self._dct_spreader
+        coords_for_header = spreader.generate_coords(
+            container=stego,
+            payload_bits_len=header_bits,
+            password_seed=request.password,
+        )
 
         header_bytes = processor.extract(stego, coords_for_header, header_size)
 
@@ -225,15 +220,11 @@ class StegoService:
                 f"нужно {full_frame_bits} бит, доступно {pool.size}."
             )
 
-        if processor_kind == "LSB":
-            spreader = SmartSpreader()
-            coords_full = spreader.generate_coords(
-                container=stego,
-                payload_bits_len=full_frame_bits,
-                password_seed=request.password,
-            )
-        else:
-            coords_full = shuffle_pool_by_password(pool, request.password)[:full_frame_bits]
+        coords_full = spreader.generate_coords(
+            container=stego,
+            payload_bits_len=full_frame_bits,
+            password_seed=request.password,
+        )
 
         full_frame = processor.extract(stego, coords_full, full_frame_size)
 
@@ -309,12 +300,8 @@ class StegoService:
         container = fmt_handler.load(request.carrier_path)
 
         processor_kind = _FORMAT_TO_PROCESSOR[carrier_fmt]
-        if processor_kind == "LSB":
-            spreader = SmartSpreader()
-            capacity_bits = spreader.get_max_capacity_bits(container)
-        else:  # DCT
-            pool = self._dct.get_embeddable_positions(container)
-            capacity_bits = int(pool.size)
+        spreader = self._lsb_spreader if processor_kind == "LSB" else self._dct_spreader
+        capacity_bits = spreader.get_max_capacity_bits(container)
 
         payload_size = Path(request.payload_path).stat().st_size
         header_size = CryptoEngine.header_size()
