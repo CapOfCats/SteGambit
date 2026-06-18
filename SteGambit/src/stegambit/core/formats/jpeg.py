@@ -62,13 +62,20 @@ class JpegFormat:
         if not path.exists():
             raise FileNotFoundError(f"JPEG-файл не найден: {path}")
 
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+            tmp_path = tmp.name
         try:
-            raw = jpeglib.read_dct(str(path))
-        except Exception as e:
-            raise CorruptedCarrierError(
-                f"Не удалось прочитать JPEG-файл '{path.name}'. "
-                f"Возможно, файл повреждён, не является JPEG или содержит неподдерживаемый цветовой профиль."
-            ) from e
+            shutil.copyfile(path, tmp_path)
+            try:
+                raw = jpeglib.read_dct(tmp_path)
+            except Exception as e:
+                raise CorruptedCarrierError(
+                    f"Не удалось прочитать JPEG-файл '{path.name}'. "
+                    f"Возможно, файл повреждён, не является JPEG или содержит неподдерживаемый цветовой профиль."
+                ) from e
+        finally:
+            if Path(tmp_path).exists():
+                Path(tmp_path).unlink()
 
         coef_arrays = [raw.Y]
         if raw.Cb is not None and raw.Cr is not None:
