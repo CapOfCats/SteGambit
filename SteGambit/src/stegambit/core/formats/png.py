@@ -1,9 +1,20 @@
 from ..base import FileFormat
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageFile
 import numpy as np
 
 from stegambit.core.exceptions import CorruptedCarrierError
+
+
+# Снятие DoS-защиты PIL для больших стего-носителей.
+#
+# Pillow по умолчанию запрещает изображения > ~178M пикселей (защита от decompression-bomb атак на веб-серверы). 
+# В контексте стеганографии это мешает: пользователь сознательно выбирает большой носитель ради ёмкости.
+Image.MAX_IMAGE_PIXELS = None
+
+# Толерантность к slightly-обрезанным PNG. Без этого PIL падает на
+# последнем чанке IDAT при минимальной побитовой повреждённости файла.
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 class PngFormat(FileFormat):
@@ -14,19 +25,20 @@ class PngFormat(FileFormat):
           одноканальные / палитровые PNG приводятся к 3-канальному виду
           для единообразия с LsbProcessor.
         * Сохранение через Pillow в режиме PNG (lossless).
+        * DoS-защита PIL снята на уровне модуля (см. комментарий выше).
 
     Note:
         PNG-LSB чувствителен к любым lossy-преобразованиям. Поэтому save()
         строго через PNG-encoder; конвертация в JPEG / другие форматы запрещена
         на уровне политики анти-конверсии (см. StegoService.hide_data).
     """
-    
+
     @property
     def magic(self) -> bytes:
-        """Magic bytes PNG: \\x89PNG (полный сигнатурный префикс — 8 байт,
+        """Magic bytes PNG: \\x89PNG (полный сигнатурный префикс - 8 байт,
         но первых 4 достаточно для идентификации)."""
         return b'\x89PNG'
-    
+
     def load(self, path: Path) -> np.ndarray:
         """Декодирует PNG в RGB ndarray shape=(H, W, 3), dtype=uint8.
 
@@ -54,16 +66,16 @@ class PngFormat(FileFormat):
             raise CorruptedCarrierError(
                 f"Не удалось прочитать PNG-файл: {path.name}. Возможно, файл повреждён или не является PNG."
             ) from e
-    
+
     def save(self, data: np.ndarray, path: Path) -> None:
-        """Сохраняет RGB ndarray в PNG (lossless).
+        """Сохраняет RGB ndarray в PNG.
 
         Args:
             data: RGB-массив shape=(H, W, 3), dtype=uint8.
             path: Путь сохранения с расширением .png.
 
         Note:
-            Сжатие — стандартное Pillow (deflate). Без оптимизации, чтобы
+            Сжатие - стандартное Pillow (deflate). Без оптимизации, чтобы
             не тратить время на тяжёлый optimize=True.
         """
         with open(path, "wb") as f:
