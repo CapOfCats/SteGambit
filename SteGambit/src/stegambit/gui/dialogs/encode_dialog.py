@@ -12,7 +12,6 @@ from typing import Optional
 @dataclass
 class EncodeDialogResult:
     password: str
-    derive_seed_from_password: bool
     output_path: Path
 
 
@@ -86,14 +85,6 @@ class EncodeDialog(QDialog):
         self.edit_pass1.textChanged.connect(self._check_passwords)
         self.edit_pass2.textChanged.connect(self._check_passwords)
 
-        self.chk_derive_seed = QCheckBox("Derive Coordinate Seed from Passphrase")
-        self.chk_derive_seed.setChecked(True)
-        g2_layout.addWidget(self.chk_derive_seed, 1, 0, 1, 2)
-
-        lbl_prng = QLabel("— PRNG initialization will use passphrase hash as seed")
-        lbl_prng.setObjectName("lbl_prng_hint")
-        g2_layout.addWidget(lbl_prng, 2, 0, 1, 2)
-
         root.addWidget(group2)
 
         step3_row = QHBoxLayout()
@@ -158,10 +149,8 @@ class EncodeDialog(QDialog):
             self._check_passwords()
 
     def _on_start(self):
-        raw_password = self.edit_pass1.text()
         result = EncodeDialogResult(
-            self.edit_pass1.text(),
-            derive_seed_from_password=self.chk_derive_seed.isChecked(),
+            password=self.edit_pass1.text(),
             output_path=Path(self.edit_output.text()),
         )
         self.confirmed.emit(result)
