@@ -485,7 +485,8 @@ class MetricsPanel(QWidget):
             )
             self.lbl_ssim.setTextFormat(Qt.TextFormat.RichText)
         else:
-            self.lbl_ssim.setText("SSIM: N/A (DCT)")
+            is_dct = "DCT" in (data.algorithm or "").upper()
+            self.lbl_ssim.setText("SSIM: N/A (DCT)" if is_dct else "SSIM: N/A (disabled)")
             self.lbl_ssim.setTextFormat(Qt.TextFormat.PlainText)
 
         self.lbl_time.setText(f"Time: {data.time_sec:.2f}s")
@@ -517,7 +518,14 @@ class MetricsPanel(QWidget):
                 f"{'≥' if data.ssim >= 0.95 else '<'}0.95]"
             )
         else:
-            self.lbl_ssim_val.setText("SSIM Index: N/A (DCT — frequency domain)")
+            is_dct = "DCT" in (data.algorithm or "").upper()
+            if is_dct:
+                self.lbl_ssim_val.setText("SSIM Index: N/A (DCT — frequency domain)")
+            else:
+                self.lbl_ssim_val.setText(
+                    "SSIM Index: N/A — disabled in Settings "
+                    "(Performance & Logs → Calculate Heavy Visual Metrics)"
+        )
 
         self.lbl_time_val.setText(f"Processing Time: {data.time_sec:.2f} sec")
         dev_badge = "!!!" if abs(data.size_deviation_pct) <= 30 else "???"

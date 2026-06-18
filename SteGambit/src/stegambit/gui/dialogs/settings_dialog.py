@@ -16,6 +16,7 @@ class AppSettings:
     enable_analytics: bool = True
     use_default_prng: bool = True
     logging_level: int = 3
+    compute_visual_metrics: bool = False
 
 
 class SettingsDialog(QDialog):
@@ -108,6 +109,16 @@ class SettingsDialog(QDialog):
         self.slider_log.setValue(3)
         self.slider_log.setMaximumWidth(180)
         perf_layout.addWidget(self.slider_log, 0, 3)
+        self.chk_compute_ssim = QCheckBox(
+            "Calculate Heavy Visual Metrics (SSIM) — affects performance"
+        )
+        self.chk_compute_ssim.setChecked(False)
+        self.chk_compute_ssim.setToolTip(
+            "Включает расчёт психовизуальной метрики SSIM.\n"
+            "Добавляет ~1 секунду к операции на больших изображениях.\n"
+            "Рекомендуется только для детального отчёта качества."
+        )
+        perf_layout.addWidget(self.chk_compute_ssim, 1, 0, 1, 5)
         lbl_max = QLabel("[Max.]")
         lbl_max.setStyleSheet("color: #888888;")
         perf_layout.addWidget(lbl_max, 0, 4)
@@ -129,9 +140,11 @@ class SettingsDialog(QDialog):
         self.chk_analytics.setChecked(self._settings.enable_analytics)
         self.chk_default_prng.setChecked(self._settings.use_default_prng)
         self.slider_log.setValue(self._settings.logging_level)
+        self.chk_compute_ssim.setChecked(self._settings.compute_visual_metrics)
 
     def _on_ok(self):
         self._settings.encryption_type = self.combo_enc.currentText()
+        self._settings.compute_visual_metrics = self.chk_compute_ssim.isChecked()
         self._settings.kdf = self.combo_kdf.currentText()
         self._settings.spreading_algorithm = self.combo_spread.currentText()
         self._settings.enable_analytics = self.chk_analytics.isChecked()

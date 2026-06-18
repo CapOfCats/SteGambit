@@ -214,7 +214,11 @@ class TestHideDataMetrics:
     def test_lsb_response_contains_all_metrics(
         self, png_carrier, small_payload, tmp_path
     ):
-        """PNG-encode -> в metrics есть psnr, ssim, size_deviation, quality_status, time."""
+        """PNG-encode c compute_visual_metrics=True - в metrics все поля включая ssim.
+
+        После оптимизации #25 SSIM считается опционально. Тест явно запрашивает
+        визуальные метрики, чтобы проверить полный набор полей в response.
+        """
         service = StegoService()
         output = tmp_path / "stego.png"
         request = StegoTaskRequest(
@@ -222,6 +226,7 @@ class TestHideDataMetrics:
             payload_path=small_payload,
             output_path=output,
             password="test",
+            compute_visual_metrics=True,
         )
         response = service.hide_data(request)
 
@@ -241,3 +246,35 @@ class TestHideDataMetrics:
         # Статус - Enum
         assert isinstance(metrics["quality_status"], QualityStatus)
         assert metrics["quality_status"] == QualityStatus.OK
+
+    def test_lsb_response_without_visual_metrics_omits_ssim(
+        self, png_carrier, small_payload, tmp_path
+    ):
+        """По умолчанию compute_visual_metrics=False - ssim отсутствует в metrics.
+
+        Архитектурное решение #25: SSIM не должен попадать мандаторно в hide_data.
+        Защитный тест от случайного возврата к старому поведению.
+        """
+        service = StegoService()
+        output = tmp_path / "stego.png"
+        request = StegoTaskRequest(
+            carrier_path=png_carrier,
+            payload_path=small_payload,
+            output_path=output,
+            password="test",
+            # compute_visual_metrics не указан - дефолт False
+        )
+        response = service.hide_data(request)
+
+        assert response.success is True
+        metrics = response.metrics
+
+        # Обязательный набор остаётся.
+        assert "psnr" in metrics
+        assert "size_deviation" in metrics
+        assert "quality_status" in metrics
+        assert "time" in metrics
+        # SSIM пропущен.
+        assert "ssim" not in metrics, (
+            "SSIM не должен считаться без явного запроса - это оптимизация #25."
+        )

@@ -278,6 +278,7 @@ class MainWindow(QMainWindow):
                 payload_path=payload,
                 output_path=result.output_path,
                 password=result.password,
+                compute_visual_metrics=self._settings.compute_visual_metrics,
             )
         except (FileNotFoundError, ValueError, TypeError) as e:
             self._set_status(f"Ошибка: {e}", level="error")
