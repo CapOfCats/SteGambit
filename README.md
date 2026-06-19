@@ -1,189 +1,237 @@
-<<<<<<< HEAD
-# SteGambit
+# 🔒 SteGambit
 
+![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
+![PyQt6](https://img.shields.io/badge/PyQt6-GUI-green.svg)
+![Cryptography](https://img.shields.io/badge/Security-AES--GCM--256-red.svg)
+![License](https://img.shields.io/badge/License-MIT-purple.svg)
 
+**SteGambit** - это кроссплатформенный инструмент для безопасного сокрытия файлов внутри других файлов - **стеганография "File-in-File"** с использованием криптографической защиты. Проект реализует продвинутые алгоритмы внедрения данных в изображения (PNG, JPEG) и аудио (WAV), обеспечивая высокую визуальную и статистическую незаметность.
 
-## Getting started
+## 🌟 Ключевые возможности
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+* **Мультиформатность:** Поддержка `PNG` и `WAV` (пространственное/временное LSB-внедрение) и `JPEG` (частотное JSteg-внедрение в DCT-коэффициенты).
+* **Content-Aware Spreading (LSB):** Встроенный детектор границ (Edge Detection) анализирует градиенты изображения и автоматически избегает "гладких" областей, внедряя скрытые данные только в шумные участки для защиты от визуальных атак.
+* **Строгая криптография (AEAD):** Перед внедрением любой файл шифруется алгоритмом **AES-GCM-256**. Ключи генерируются на основе пароля с использованием **PBKDF2 (SHA-256)** с уникальной солью.
+* **Детерминированный хаос (PRNG):** Координаты внедрения псевдослучайно перемешиваются. Сидом (seed) для генератора выступает криптографический хеш пароля, что делает невозможным извлечение (или даже обнаружение) данных без знания исходной секретной фразы.
+* **Встроенная аналитика:** Автоматический расчет метрик качества: **PSNR**, **SSIM** (опционально) и процента отклонения размера файла.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+---
 
-## Add your files
+## 📸 Интерфейс // User Guide
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+SteGambit спроектирован по принципу "Сложно внутри — просто снаружи". Главное окно предоставляет быстрый доступ к процессам кодирования и декодирования.
 
-```
-cd existing_repo
-git remote add origin https://git.cs.hse.ru/dddaragan/SteGambit.git
-git branch -M main
-git push -uf origin main
-```
+### 1. Оценка совместимости и скрытие (ENCODE PANEL)
+![Главное окно - Encode Workflow](docs/images/encodePanel.jpg)
+1. Выберите файл-контейнер (**Carrier File**).
+2. Выберите файл для сокрытия (**Payload File**).
+3. Нажмите `Check Compatibility`. Ядро математически оценит ёмкость контейнера: для PNG анализируется количество edge-пикселей, для JPEG — наличие доступных среднечастотных AC-коэффициентов.
+4. Если статус `FITS`, нажмите `HIDE DATA`.
+5. В открывшемся диалоге введите пароль и выберите путь сохранения.
 
-## Integrate with your tools
+![Encode Dialog](docs/images/encodeDialog.jpg)
 
-- [ ] [Set up project integrations](https://git.cs.hse.ru/dddaragan/SteGambit/-/settings/integrations)
+### 2. Извлечение данных (DECODE PANEL)
+![Вкладка Decode](docs/images/decodeTab.jpg)
+1. Выберите зараженный (stego) файл.
+2. Укажите папку для выгрузки.
+3. Введите пароль, использованный при сокрытии.
+4. Нажмите `Extract Data`. Система проверит Magic Bytes зашифрованного фрейма и целостность тега аутентификации MAC (AES-GCM), после чего восстановит исходный файл с оригинальным расширением.
 
-## Collaborate with your team
+### 3. Конфигурация и Метрики качества
+В меню `⚙ Settings` можно отключить тяжелые визуальные метрики (SSIM) для ускорения работы или управлять уровнем логирования. А после каждого внедрения выводится панель `AnalyticsAnalyzer`:
+![Панель метрик](docs/images/metricsPanel.jpg)
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+---
 
-## Test and Deploy
+## 🛠 Техническая архитектура (Under the Hood)
 
-Use the built-in continuous integration in GitLab.
+SteGambit построен по принципу **Clean Architecture** с чёткой границей между слоями:
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
-=======
-# SteGambit
-
-
-
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://git.cs.hse.ru/dddaragan/SteGambit.git
-git branch -M main
-git push -uf origin main
+```text
+┌─────────────────────────────────────────────────────────┐
+│                    GUI Layer (PyQt6)                    │
+│  MainWindow → EncodePanel / DecodePanel / SettingsDlg   │
+└─────────────────────────────────────────────────────────┘
+                             │
+                             │ StegoTaskRequest (DTO)
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│                  Async Layer (QThread)                  │
+│  StegoWorker — изолирует тяжёлые операции от UI-потока  │
+└─────────────────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│                 Service Layer (Facade)                  │
+│ StegoService — оркестрация: validate → crypto →         │
+│ spread → embed → save → metrics                         │
+└─────────────────────────────────────────────────────────┘
+                             │
+       ┌─────────────────────┼─────────────────────┐
+       ▼                     ▼                     ▼
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│ CryptoEngine │     │   Spreader   │     │  Processor   │
+│ (AES-GCM-256)│     │ (Smart/DCT)  │     │  (LSB/DCT)   │
+└──────────────┘     └──────────────┘     └──────────────┘
+       │                     │                     │
+       └─────────────────────┼─────────────────────┘
+                             ▼
+                     ┌──────────────┐
+                     │  Format I/O  │
+                     │ PNG/WAV/JPEG │
+                     └──────────────┘
 ```
 
-## Integrate with your tools
+GUI **не знает** про `numpy`, `AES` или `DCT-коэффициенты`. Service-слой **не знает** про `QtWidgets`. Связь — через DTO (`StegoTaskRequest` / `StegoResponse`).
 
-- [ ] [Set up project integrations](https://git.cs.hse.ru/dddaragan/SteGambit/-/settings/integrations)
+### Криптографический фрейм
 
-## Collaborate with your team
+Перед внедрением payload оборачивается в `CryptoFrame` — самоописываемый бинарный блок:
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+```text
+┌────────┬───────┬──────────┬───────────┬─────────┬──────────────────────┐
+│ MAGIC  │ FLAGS │   SALT   │   NONCE   │  LENGTH │      CIPHERTEXT      │
+│ 4 byte │ 1 byte│ 16 bytes │  12 bytes │ 8 bytes │      + GCM-TAG       │
+└────────┴───────┴──────────┴───────────┴─────────┴──────────────────────┘
+  "STGB"   v1.0     random      random    big-end       AES-GCM-256
+```
 
-## Test and Deploy
+- **MAGIC** — сигнатура `STGB`. При extract проверяется первой: если не совпала — либо пароль неверный, либо файл не содержит payload.
+- **SALT** — случайные 128 бит (16 байт). Подаются в PBKDF2 вместе с паролем — гарантирует, что один и тот же пароль на двух разных стего-файлах даёт **разные** AES-ключи.
+- **NONCE** — IV для AES-GCM (12 байт, требование стандарта NIST SP 800-38D).
+- **LENGTH** — длина ciphertext в байтах. Позволяет читать ровно столько бит при extract, не больше.
+- **CIPHERTEXT + GCM-TAG** — зашифрованный payload + 16-байтовый authentication tag. Любое изменение даже одного бита ciphertext'а приводит к ошибке `InvalidTag` при decrypt — это и есть детектор тампера.
 
-Use the built-in continuous integration in GitLab.
+### LSB Spreading (PNG/WAV)
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+Наивный LSB пишет биты в первые N пикселей подряд — это палится статистическим χ²-тестом за миллисекунды. **SmartSpreader** делает три вещи:
 
-***
+1. **Edge detection** — оператор Собеля по grayscale-проекции, отбрасывает гладкие области (где LSB-шум виден глазу).
+2. **Pool pruning** — фильтрует кандидатов: остаются только пиксели с высоким градиентом.
+3. **Password-seeded shuffle** — пул перемешивается перестановкой, сидированной от `SHA-256(password)`. Без пароля координаты невосстановимы.
 
-# Editing this README
+Результат: payload разбросан по «шумным» зонам контейнера в детерминированном, но криптографически непредсказуемом порядке.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+### DCT Spreading (JPEG)
 
-## Suggestions for a good README
+Для JPEG пространственные пиксели бесполезны — повторное сжатие уничтожит изменения. **DctProcessor** работает с **квантованными DCT-коэффициентами** напрямую (без re-encode):
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+1. Через `jpegio` извлекаются `coef_arrays[0]` — Y-канал блоков 8×8.
+2. В каждом блоке отбираются **среднечастотные AC** (zigzag 1..27): DC не трогаем (вызовет «шахматные» артефакты), высокие частоты — почти всегда нули, их модификация сломает Хаффман-сжатие.
+3. Из пула исключаются значения `{-2, -1, 0, 1}` — их LSB-модификация либо меняет знак (сломает декодер), либо обнуляет коэффициент (сломает пул при extract).
+4. Перестановка — та же `password-seeded shuffle`.
 
-## Name
-Choose a self-explaining name for your project.
+Получаем JSteg-подобный пайплайн с расширенным фильтром, устойчивый к re-save в большинстве просмотрщиков.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+### Производительность
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+- **NumPy-векторизация:** все битовые операции (`unpackbits` / `packbits` / маски `& ~1 | bit`) выполняются над целыми массивами без Python-циклов.
+- **Async UI:** все тяжёлые операции уходят в `StegoWorker(QThread)` — GUI не подмерзает даже на 68 МБ WAV.
+- **Опциональный SSIM:** psychovisual-метрика отключаема в настройках (на 2 МБ PNG экономит ~1.5 с).
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+Подробные UML/C4-диаграммы и Architectural Decision Records (ADR) доступны в папке `docs/`.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+---
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+## ⚙️ Сборка и установка (Build & Run)
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+### Требования
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+- **Python 3.12+**
+- **OS:** Windows 10/11, macOS 12+, Linux (Ubuntu 22.04+)
+- ~500 МБ свободного места на диске (с учётом venv + зависимостей)
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+### Вариант 1 — Использовать готовый .exe (для пользователей Windows)
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+Скачайте последний релиз из раздела **Releases** репозитория. Архив содержит:
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+```text
+SteGambit/
+├── SteGambit.exe  ← запускаемый файл
+├── _internal/     ← runtime-зависимости
+└── README.txt
+```
 
-## License
-For open source projects, say how it is licensed.
+Просто запустите `SteGambit.exe` — установка не требуется. Все настройки хранятся в памяти приложения (не пишутся в реестр Windows).
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
->>>>>>> 02fe52b10a4653f2675dba89a94eb1e7603d5442
+### Вариант 2 — Запуск из исходников (для разработчиков)
+
+```bash
+# 1. Клонировать репозиторий
+git clone https://git.cs.hse.ru/dddaragan/SteGambit.git
+cd SteGambit
+
+# 2. Создать виртуальное окружение
+python -m venv .venv
+.\.venv\Scripts\activate         # Windows
+source .venv/bin/activate        # macOS/Linux
+
+# 3. Установить зависимости
+pip install -e .                 # из pyproject.toml
+# или
+pip install -r requirements.txt  # из requirements
+
+# 4. Запустить приложение
+python -m stegambit
+```
+
+### Вариант 3 — Сборка .exe из исходников (PyInstaller)
+
+```bash
+# Установить PyInstaller
+pip install pyinstaller
+
+# Собрать (onedir-режим, рекомендуется — стартует быстрее)
+pyinstaller build.spec
+
+# Результат:
+# dist/SteGambit/SteGambit.exe
+```
+
+Конфигурация PyInstaller лежит в `build.spec`. Параметры:
+
+- **onedir** — приложение + рантайм в отдельной папке (быстрый старт, ~100 МБ).
+- **windowed** — без чёрной консоли при запуске GUI.
+- **hidden imports** — явно прописаны `jpegio`, `PIL._tkinter_finder` (PyInstaller не всегда их находит автоматически).
+
+### Запуск тестов
+
+```bash
+# Юнит + интеграционные (быстро, ~30 секунд):
+pytest tests/
+
+# E2E test smoke (быстро):
+pytest tests/e2e/
+
+# E2E load (тяжёлые сценарии, ~3-6 минут):
+pytest tests/e2e/test_e2e_load.py -m load -v -s
+```
+
+### Документация API
+
+```bash
+# Установить mkdocs (один раз)
+pip install mkdocs mkdocstrings[python]
+
+# Запустить локальный сервер
+mkdocs serve
+# → откроет http://127.0.0.1:8000 с автосгенерированной API-документацией
+```
+
+---
+
+## ❓ FAQ и Ограничения (Troubleshooting)
+
+**В: Выдает ошибку "Недостаточно ёмкости / TOO LARGE", хотя оригинальный файл весит 5 МБ, а payload — 1 МБ.**
+О: Размер файла (в байтах) не равен его стеганографической ёмкости. Если это `JPEG`, ёмкость ограничена количеством ненулевых валидных DCT-коэффициентов. Если это `PNG`, ёмкость ограничена политикой *Content-Aware* (система отказывается портить гладкие участки неба/стен, чтобы не вызывать визуальных артефактов). Берите картинку с большим количеством деталей (шумную) или увеличьте разрешение.
+
+**В: Ошибка "MAGIC bytes не найдены" при извлечении.**
+О: Это означает одно из двух: (1) Неверный пароль (координаты сгенерировались неверно, и система прочитала "мусор"), либо (2) Данный файл чист и не содержит спрятанных данных.
+
+**В: Почему я не могу спрятать данные в `PNG` и сохранить результат как `JPEG`?**
+О: Включена математическая *политика анти-конверсии*. При сохранении LSB-модифицированного изображения в формат с потерями (JPEG), пространственная матрица будет пережата, и младшие биты будут уничтожены сжатием Хаффмана/квантованием. Система блокирует такие действия на уровне интерфейса.
+
+---
+*Created as an Academic Project.

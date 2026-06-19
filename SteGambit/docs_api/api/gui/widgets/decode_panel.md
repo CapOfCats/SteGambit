@@ -1,0 +1,1 @@
+::: stegambit.gui.widgets.decode_panel

@@ -27,6 +27,14 @@ dev = [
     "isort>=5.12.0",
     "mypy>=1.5.0",
 ]
+build = [
+    "pyinstaller>=6.0.0",
+]
+docs = [
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings[python]>=0.24.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -59,4 +67,4 @@ addopts = [
 ]
 
 [project.gui-scripts]
-stegambit = "stegambit.gui.main_window:main"
+stegambit = "stegambit.main:main"

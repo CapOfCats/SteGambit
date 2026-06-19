@@ -1,0 +1,1 @@
+::: stegambit.core.formats.png

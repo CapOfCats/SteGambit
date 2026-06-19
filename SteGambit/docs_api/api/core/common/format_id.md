@@ -1,0 +1,1 @@
+::: stegambit.core.common.format_id
