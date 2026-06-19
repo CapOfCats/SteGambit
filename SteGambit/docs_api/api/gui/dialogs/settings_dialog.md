@@ -1,0 +1,1 @@
+::: stegambit.gui.dialogs.settings_dialog

@@ -1,0 +1,97 @@
+docs_dir: docs_api
+site_name: SteGambit
+site_description: Multi-format steganography tool with Defense-in-Depth
+site_author: dddaragan
+repo_url: https://git.cs.hse.ru/dddaragan/SteGambit
+repo_name: SteGambit
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - content.code.annotate
+    - search.suggest
+    - search.highlight
+  icon:
+    logo: material/lock
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_signature_annotations: true
+            separate_signature: true
+            docstring_style: google
+            members_order: source
+            heading_level: 2
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Testing: testing.md
+  - API Reference:
+      - Services:
+          - StegoService: api/services/stego_service.md
+          - AsyncWorker: api/services/async_worker.md
+          - Analytics: api/services/analytics.md
+      - Core:
+          - Common:
+              - Format Identifier: api/core/common/format_id.md
+              - Seeding: api/core/common/seeding.md
+          - Crypto:
+              - Engine: api/core/crypto/engine.md
+              - Key Manager: api/core/crypto/key_manager.md
+          - Stego:
+              - Strategies: api/core/stego/strategies.md
+              - Spreader (LSB): api/core/stego/spreader.md
+              - DCT Spreader: api/core/stego/dct_spreader.md
+          - Formats:
+              - PNG: api/core/formats/png.md
+              - JPEG: api/core/formats/jpeg.md
+              - WAV: api/core/formats/wav.md
+      - Models:
+          - DTO: api/models/dto.md
+      - GUI:
+          - MainWindow: api/gui/main_window.md
+          - Dialogs:
+              - Encode Dialog: api/gui/dialogs/encode_dialog.md
+              - Settings Dialog: api/gui/dialogs/settings_dialog.md
+          - Widgets:
+              - Encode Panel: api/gui/widgets/encode_panel.md
+              - Decode Panel: api/gui/widgets/decode_panel.md
+              - File Panel: api/gui/widgets/file_panel.md
+              - Metrics Panel: api/gui/widgets/metrics_panel.md

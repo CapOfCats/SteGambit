@@ -1,0 +1,1 @@
+::: stegambit.gui.widgets.file_panel

@@ -1,0 +1,1 @@
+::: stegambit.gui.widgets.metrics_panel

@@ -1,0 +1,1 @@
+::: stegambit.models.dto
