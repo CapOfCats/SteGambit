@@ -1,107 +1,107 @@
 ```markdown
-Тестирование (SteGambit)
+Testing (SteGambit)
 
-Unit-тесты для проекта SteGambit. Фреймворк: `pytest`.
+Unit tests for the SteGambit project. Framework: `pytest`.
 
-🗂 Структура
+🗂 Structure
 
 tests/
 ├── __init__.py
-├── README.md               # Данный файл
-├── test_crypto.py          # Тесты core/crypto (CryptoEngine, KeyManager)
-└── ...                     # Новые test_*.py по мере роста покрытия
+├── README.md               # This file
+├── test_crypto.py          # Tests for core/crypto (CryptoEngine, KeyManager)
+└── ...                     # New test_*.py files as coverage grows
 ```
 
-**Правило организации:** Один модуль из `core/` = один файл `test_<модуль>.py`. Внутри файла тесты группируются по классам `test<Компонент>`.
+**Organization rule:** One module from `core/` equals one file `test_<module>.py`. Inside the file, tests are grouped into classes `Test<Component>`.
 
 ---
 
-## 🚀 Запуск тестов
+## 🚀 Running tests
 
-Перед началом работы убедитесь, что установлены dev-зависимости проекта в режиме редактирования (editable):
+Before you start, make sure the project's dev dependencies are installed in editable mode:
 
 ```bash
 python -m pip install -e ".[dev]"
 ```
 
-### Варианты запуска
+### Run options
 
-*   **Все тесты проекта:**
+*   **All project tests:**
     ```bash
     python -m pytest
     ```
-*   **Конкретный модуль (файл):**
+*   **A specific module (file):**
     ```bash
     python -m pytest tests/test_crypto.py
     ```
-*   **Конкретный класс тестов:**
+*   **A specific test class:**
     ```bash
     python -m pytest tests/test_crypto.py::TestCompression
     ```
-*   **Один конкретный тест:**
+*   **A single test:**
     ```bash
     python -m pytest tests/test_crypto.py::TestCompression::test_compressed_roundtrip
     ```
 
 ---
 
-## 🛠 Полезные флаги Pytest
+## 🛠 Useful Pytest flags
 
-Для удобства отладки используйте следующие ключи:
+Use the following flags when debugging:
 
-| Флаг | Назначение |
+| Flag | Purpose |
 | :--- | :--- |
-| `-v` | Подробный вывод (каждый тест выводится отдельной строкой). |
-| `-x` | Остановить выполнение при первой же ошибке (Fast Fail). |
-| `--tb=short` | Укороченный traceback при падении тестов. |
-| `--tb=line` | Однострочный traceback (минимум визуального шума). |
-| `-k "запрос"` | Запуск тестов, содержащих `"запрос"` в имени. |
-| `--lf` | Запустить только те тесты, которые упали в предыдущем прогоне (Last Failed). |
+| `-v` | Verbose output (each test on its own line). |
+| `-x` | Stop at the first failure (fast fail). |
+| `--tb=short` | Short traceback when tests fail. |
+| `--tb=line` | One-line traceback (minimal visual noise). |
+| `-k "query"` | Run tests whose names contain `"query"`. |
+| `--lf` | Run only the tests that failed on the previous run (last failed). |
 
-**Пример отладочного ввода:**
+**Example debug command:**
 ```bash
 python -m pytest tests/test_crypto.py -v -x --tb=short
 ```
 
 ---
 
-##  Как добавить новый unit-тест
+## How to add a new unit test
 
-1.  Создайте файл `tests/test_<модуль>.py`.
-2.  Импортируйте тестируемые сущности:
+1.  Create a file `tests/test_<module>.py`.
+2.  Import the units under test:
     ```python
-    from stegambit.core.<модуль> import ...
+    from stegambit.core.<module> import ...
     ```
-3.  **Сгруппируйте** тесты по классам `TestXxx` (опционально, но настоятельно рекомендуется Архитектором для чистоты логов).
-4.  **Именование конвенции:** методы должны начинаться с `test_<что_проверяем>`.
-5.  **Исключения:** Для проверки ожидаемых ошибок используйте `pytest.raises(ExceptionType)`.
-6.  **Параметризация:** При тестировании нескольких вариантов входных данных используйте декоратор. **Обязательно** указывайте `ids=[...]` (иначе Pytest попытается вставить сырые данные в консоль):
+3.  **Group** tests into `TestXxx` classes (optional, but strongly recommended by the architect for cleaner logs).
+4.  **Naming convention:** methods must start with `test_<what_is_checked>`.
+5.  **Exceptions:** use `pytest.raises(ExceptionType)` to check expected errors.
+6.  **Parametrization:** when testing several input variants, use the decorator. **Always** set `ids=[...]` (otherwise Pytest tries to paste the raw data into the console):
     ```python
     @pytest.mark.parametrize("payload", [b"A" * 1024], ids=["1kb_data"])
     ```
 
 ---
 
-## Частые проблемы (Troubleshooting)
+## Common problems (Troubleshooting)
 
 ### 1. `ModuleNotFoundError: No module named 'stegambit'`
-Не установлены dev-зависимости, либо пакет `stegambit` не проинициализирован локально. 
-**Решение:**
+The dev dependencies are not installed, or the `stegambit` package is not initialized locally.
+**Fix:**
 ```bash
 python -m pip install -e ".[dev]" --force-reinstall --no-deps
 ```
 
 ### 2. `ValueError: environment variable is longer than 32767 characters` (Windows)
-Возникает, когда в `@pytest.mark.parametrize` передается большой payload без указания параметра `ids`. Pytest пытается записать весь массив гигабайтных байтов в имя теста.
-**Решение:** Добавить человекочитаемые идентификаторы.
+This happens when `@pytest.mark.parametrize` is given a large payload without the `ids` parameter. Pytest tries to put the entire large byte string into the test name.
+**Fix:** Add human-readable identifiers.
 ```python
-# ПЛОХО:
+# BAD:
 @pytest.mark.parametrize("payload", [b"A" * 1_000_000])
 
-# ХОРОШО:
+# GOOD:
 @pytest.mark.parametrize("payload", [b"A" * 1_000_000], ids=["1mb_payload"])
 ```
 
-### 3. Pytest запускает не тот Python
-Если в системе несколько версий Python или конфликтуют виртуальные окружения (`venv`). Обрати внимание на то, где находится твой интерпретер относительно pytest. Частая проблема - один не увидит другого=конфликт.
-**Решение:** Всегда вызывайте тесты через модуль интерпретатора `python -m pytest`, а не через прямой бинарник `pytest`. Это гарантирует использование нужного окружения.
+### 3. Pytest runs the wrong Python
+This happens when several Python versions are installed, or virtual environments (`venv`) conflict. Check where your interpreter sits relative to pytest. A common failure is that one cannot see the other, which causes a conflict.
+**Fix:** Always invoke tests through the interpreter module `python -m pytest`, not through the `pytest` binary directly. That uses the intended environment.

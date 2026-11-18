@@ -1,7 +1,7 @@
-"""Проверки граничных условий ёмкости носителя.
+"""Checks of carrier capacity boundary conditions.
 
-Покрывает CompatibilityError при переполнении и контракт analyze_capacity:
-числа в CapacityReport должны быть согласованы с реальной попыткой embed.
+Covers CompatibilityError on overflow and the analyze_capacity contract:
+numbers in CapacityReport must agree with a real embed attempt.
 """
 import pytest
 
@@ -14,10 +14,10 @@ pytestmark = [pytest.mark.integration]
 
 
 def test_capacity_overflow_raises(png_small, payload_zip, tmp_path):
-    """Payload крупнее ёмкости носителя -> отказ ДО фактического embed.
+    """A payload larger than the carrier capacity -> refusal BEFORE the actual embed.
 
-    small.png (64x64) физически не вместит archive.zip (~10.5 KB).
-    Сервис должен это поймать и кинуть CompatibilityError  из Spreader.
+    small.png (64x64) physically cannot hold archive.zip (~10.5 KB).
+    The service must catch this and raise CompatibilityError from Spreader.
     """
     service = StegoService()
     stego_path = tmp_path / "stego.png"
@@ -30,13 +30,13 @@ def test_capacity_overflow_raises(png_small, payload_zip, tmp_path):
             password="pwd",
         ))
 
-    # В сообщении ошибки должна быть конкретика - сколько не хватает.
+    # The error message should be specific — how much is missing.
     msg = str(exc_info.value).lower()
     assert any(word in msg for word in ("ёмкост", "недостаточно", "бит", "байт")), (
         f"Сообщение об ошибке должно содержать численные детали, получено: {exc_info.value!r}"
     )
 
-    # Файл не должен быть создан при провале валидации.
+    # The file must not be created when validation fails.
     assert not stego_path.exists(), (
         "Стего-файл создан несмотря на отказ - значит, ошибка возникла "
         "после save(), а должна была до."
@@ -44,12 +44,12 @@ def test_capacity_overflow_raises(png_small, payload_zip, tmp_path):
 
 
 def test_analyze_capacity_fits_for_tiny_payload(png_medium, payload_tiny):
-    """analyze_capacity для маленького payload в среднем носителе - fits=True."""
+    """analyze_capacity for a small payload in a medium carrier — fits=True."""
     service = StegoService()
     report = service.analyze_capacity(StegoTaskRequest(
         carrier_path=png_medium,
         payload_path=payload_tiny,
-        output_path=png_medium,  # не используется в analyze
+        output_path=png_medium,  # unused in analyze
         password="pwd",
     ))
 
@@ -65,7 +65,7 @@ def test_analyze_capacity_fits_for_tiny_payload(png_medium, payload_tiny):
 
 
 def test_analyze_capacity_does_not_fit_for_large_payload(png_small, payload_zip):
-    """analyze_capacity для крупного payload в маленьком носителе - fits=False."""
+    """analyze_capacity for a large payload in a small carrier — fits=False."""
     service = StegoService()
     report = service.analyze_capacity(StegoTaskRequest(
         carrier_path=png_small,
@@ -82,7 +82,7 @@ def test_analyze_capacity_does_not_fit_for_large_payload(png_small, payload_zip)
 def test_analyze_capacity_matches_real_embed_behavior(
     png_medium, payload_tiny, tmp_path,
 ):
-    """Контракт: если analyze говорит fits=True, real embed должен пройти."""
+    """Contract: if analyze says fits=True, a real embed must succeed."""
     service = StegoService()
     req = StegoTaskRequest(
         carrier_path=png_medium,
@@ -94,13 +94,13 @@ def test_analyze_capacity_matches_real_embed_behavior(
     report = service.analyze_capacity(req)
     assert report.fits is True, "Тест-данные подобраны неверно - payload не должен переполнять носитель"
 
-    # Раз analyze разрешает - embed должен пройти.
+    # Since analyze allows it, embed must succeed.
     resp = service.hide_data(req)
     assert resp.success
 
 
 def test_analyze_capacity_jpeg_reports_dct_algorithm(jpeg_carrier, payload_tiny):
-    """JPEG-носитель -> алгоритм DCT в отчёте."""
+    """A JPEG carrier -> the DCT algorithm in the report."""
     service = StegoService()
     report = service.analyze_capacity(StegoTaskRequest(
         carrier_path=jpeg_carrier,
@@ -115,7 +115,7 @@ def test_analyze_capacity_jpeg_reports_dct_algorithm(jpeg_carrier, payload_tiny)
 
 
 def test_analyze_capacity_wav_reports_lsb_algorithm(wav_carrier, payload_tiny):
-    """WAV-носитель -> алгоритм LSB в отчёте."""
+    """A WAV carrier -> the LSB algorithm in the report."""
     service = StegoService()
     report = service.analyze_capacity(StegoTaskRequest(
         carrier_path=wav_carrier,

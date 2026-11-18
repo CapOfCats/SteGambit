@@ -16,7 +16,7 @@ class AppSettings:
 
 
 class SettingsDialog(QDialog):
-    """Окно Platform Configuration (кнопка ⚙ Settings)."""
+    """Platform Configuration window (⚙ Settings button)."""
 
     def __init__(self, settings: AppSettings, parent=None):
         super().__init__(parent)
@@ -31,7 +31,7 @@ class SettingsDialog(QDialog):
         root = QVBoxLayout(self)
         root.setSpacing(10)
 
-        # ── Cryptographic Protection (информационный блок) ──────────────────
+        # ── Cryptographic Protection (informational block) ──────────────────
         crypto_group = QGroupBox("Cryptographic Protection")
         crypto_layout = QGridLayout(crypto_group)
         crypto_layout.setColumnStretch(1, 1)

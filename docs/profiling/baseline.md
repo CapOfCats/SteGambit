@@ -1,25 +1,25 @@
-# Performance Baseline (Подтаска #25.1)
+# Performance Baseline (Subtask #25.1)
 
-**Дата прогона:** 2026-06-18 17:33:18
+**Run date:** 2026-06-18 17:33:18
 
-## 1. Методология
+## 1. Methodology
 
-- **Платформа:** Windows-10-10.0.19045-SP0
+- **Platform:** Windows-10-10.0.19045-SP0
 - **Python:** 3.12.2
 - **CPU:** Intel64 Family 6 Model 158 Stepping 10, GenuineIntel
-- **Итераций на сценарий:** 10
-- **Агрегация:** median, P95, min, max (миллисекунды).
-- **Носители:** PNG/WAV синтезируются из псевдошума (seed=42),
+- **Iterations per scenario:** 10
+- **Aggregation:** median, P95, min, max (milliseconds).
+- **Carriers:** PNG/WAV are synthesized from pseudonoise (seed=42),
   JPEG — `tests/artifacts/carriers/photo.jpg`.
-- **Payload'ы:** реальные файлы из `tests/artifacts/payloads/`.
-- **Режимы:** FAST = `compute_visual_metrics=False` (production-
-  путь, по умолчанию). FULL = `compute_visual_metrics=True`
-  (опциональная аналитика для детальных отчётов в UI).
+- **Payloads:** real files from `tests/artifacts/payloads/`.
+- **Modes:** FAST = `compute_visual_metrics=False` (production
+  path, the default). FULL = `compute_visual_metrics=True`
+  (optional analytics for detailed reports in the UI).
 
-## 2. Wall-time замеры — режим FAST (production)
+## 2. Wall-Time Measurements — FAST Mode (production)
 
-Этот режим используется при обычной работе пользователя. SSIM
-не считается, в `response.metrics` ключ `ssim` отсутствует.
+This mode is used during ordinary user work. SSIM
+is not computed, and the `ssim` key is absent from `response.metrics`.
 
 | Carrier | Carrier size | Payload | Payload size | Op | median (ms) | P95 (ms) | min (ms) | max (ms) |
 |---|---:|---|---:|---|---:|---:|---:|---:|
@@ -38,10 +38,10 @@
 | JPEG photo.jpg | 204.4 KB | secret.pdf | 7.5 KB | hide | 275.1 | 299.9 | 273.1 | 308.9 |
 | JPEG photo.jpg | 204.4 KB | secret.pdf | 7.5 KB | extract | 259.6 | 271.7 | 256.9 | 274.9 |
 
-## 3. Wall-time замеры — режим FULL (с SSIM)
+## 3. Wall-Time Measurements — FULL Mode (with SSIM)
 
-Этот режим включается флагом из UI для детального отчёта качества.
-Дополнительные ~1.5s на 2MB PNG за счёт `skimage.structural_similarity`.
+This mode is enabled by a UI flag for a detailed quality report.
+An extra ~1.5s on a 2MB PNG comes from `skimage.structural_similarity`.
 
 | Carrier | Carrier size | Payload | Payload size | Op | median (ms) | P95 (ms) | min (ms) | max (ms) |
 |---|---:|---|---:|---|---:|---:|---:|---:|
@@ -60,9 +60,9 @@
 | JPEG photo.jpg | 204.4 KB | secret.pdf | 7.5 KB | hide | 275.3 | 286.3 | 273.3 | 309.7 |
 | JPEG photo.jpg | 204.4 KB | secret.pdf | 7.5 KB | extract | 258.3 | 262.3 | 256.2 | 264.7 |
 
-## 4. Сравнение режимов — overhead визуальных метрик
+## 4. Mode Comparison — Visual-Metrics Overhead
 
-Колонка `overhead` показывает, сколько добавляет SSIM-расчёт.
+The `overhead` column shows how much the SSIM computation adds.
 
 | Carrier | Payload | hide median (fast) | hide median (full) | overhead (ms) | overhead (%) |
 |---|---|---:|---:|---:|---:|
@@ -74,16 +74,16 @@
 | JPEG photo.jpg | tiny.txt | 283.7 | 279.7 | -4.0 | -1.4% |
 | JPEG photo.jpg | secret.pdf | 275.1 | 275.3 | +0.1 | +0.1% |
 
-## 5. SLA-проверка: hide 2MB PNG ≤ 1000 ms (режим FAST)
+## 5. SLA Check: hide 2MB PNG ≤ 1000 ms (FAST mode)
 
-- **Сценарий:** PNG 2MB (noise) <- secret.pdf (fast mode)
+- **Scenario:** PNG 2MB (noise) <- secret.pdf (fast mode)
 - **Median:** 941.5 ms
-- **Порог:** 1000 ms
-- **Вердикт:** ✅ PASS
+- **Threshold:** 1000 ms
+- **Verdict:** ✅ PASS
 
-## 6. cProfile — top-30 в режиме FAST
+## 6. cProfile — top-30 in FAST Mode
 
-Один прогон hide на PNG 2MB без визуальных метрик.
+One hide run on a 2MB PNG without visual metrics.
 
 ```
          3751 function calls (3735 primitive calls) in 0.890 seconds
@@ -124,10 +124,10 @@
         1    0.009    0.009    0.009    0.009 {method 'nonzero' of 'numpy.ndarray' objects}
 ```
 
-## 7. cProfile — top-30 в режиме FULL
+## 7. cProfile — top-30 in FULL Mode
 
-Один прогон hide на PNG 2MB со SSIM. Должен явно показывать
-`structural_similarity` и `uniform_filter` в топе.
+One hide run on a 2MB PNG with SSIM. It should clearly show
+`structural_similarity` and `uniform_filter` at the top.
 
 ```
          4570 function calls (4551 primitive calls) in 1.858 seconds
@@ -168,6 +168,6 @@
         1    0.021    0.021    0.021    0.021 {method 'repeat' of 'numpy.ndarray' objects}
 ```
 
-## 8. Выводы
+## 8. Conclusions
 
-_(заполняется вручную после анализа таблиц)_
+_(filled in manually after the tables are analyzed)_

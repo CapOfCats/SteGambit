@@ -1,21 +1,21 @@
-"""Метрики качества стего-контейнеров.
+"""Quality metrics for stego containers.
 
-Этот модуль — чистый "счётный движок". Не знает ни про DTO, ни про сервисы,
-ни про GUI. На вход — ndarray и пути, на выход — числа и enum'ы.
-Использование решает StegoService (фасад) и MetricsPanel (фронт).
+This module is a pure counting engine. It knows nothing about DTOs, services,
+or the GUI. Input is ndarrays and paths; output is numbers and enums.
+StegoService (the facade) and MetricsPanel (the front end) decide how to use it.
 
-Метрики:
-    * PSNR — пиковое отношение сигнала к шуму (dB), стандарт визуальной
-             прозрачности.
-    * SSIM — индекс структурного сходства [0..1], более точная оценка
-             восприятия искажений человеком.
-    * Size Deviation — процентный прирост размера файла на диске
-             (триггер защиты от структурного стегоанализа).
+Metrics:
+    * PSNR — peak signal-to-noise ratio (dB), the standard of visual
+             transparency.
+    * SSIM — structural similarity index [0..1], a finer estimate
+             of how a human perceives distortion.
+    * Size Deviation — percent growth of the file size on disk
+             (a trigger against structural steganalysis).
 
-Триггеры качества (из отчёта, Глава 5.2):
-    * OK       — PSNR >= 40 dB и Deviation <= 30%.
+Quality triggers (from the report, Chapter 5.2):
+    * OK       — PSNR >= 40 dB and Deviation <= 30%.
     * WARNING  — 30 dB <= PSNR < 40 dB.
-    * ANOMALY  — PSNR < 30 dB или Deviation > 30%.
+    * ANOMALY  — PSNR < 30 dB or Deviation > 30%.
 """
 from pathlib import Path
 from typing import Optional
@@ -26,31 +26,31 @@ from skimage.metrics import structural_similarity as _ssim
 from stegambit.models.dto import QualityStatus
 
 
-# Пороги — общие константы модуля, чтобы не размазывать magic numbers
-# по коду. При смене политики качества меняем только здесь.
-PSNR_OK_THRESHOLD = 40.0       # dB, ниже — WARNING
-PSNR_ANOMALY_THRESHOLD = 30.0  # dB, ниже — ANOMALY
-SIZE_DEVIATION_LIMIT = 30.0    # %, выше — ANOMALY
+# Thresholds are module-level constants so magic numbers are not scattered
+# through the code. Change the quality policy only here.
+PSNR_OK_THRESHOLD = 40.0       # dB, below — WARNING
+PSNR_ANOMALY_THRESHOLD = 30.0  # dB, below — ANOMALY
+SIZE_DEVIATION_LIMIT = 30.0    # %, above — ANOMALY
 
 
 def calculate_psnr(original: np.ndarray, stego: np.ndarray) -> float:
-    """Вычисляет Peak Signal-to-Noise Ratio между двумя контейнерами.
+    """Computes the Peak Signal-to-Noise Ratio between two containers.
 
-    PSNR — стандартная метрика качества в lossless-стеганографии.
-    Чем выше PSNR, тем менее заметны искажения от встраивания payload.
-    Значения >40 dB считаются визуально неразличимыми.
+    PSNR is the standard quality metric in lossless steganography.
+    The higher the PSNR, the less visible the distortion from embedding the payload.
+    Values >40 dB are treated as visually indistinguishable.
 
     Args:
-        original: Исходный контейнер до встраивания (np.ndarray, dtype=uint8).
-                  Для изображений shape=(H, W, C), для аудио shape=(N,) или (N, 2).
-        stego:    Контейнер после встраивания payload, той же формы и dtype.
+        original: Original container before embedding (np.ndarray, dtype=uint8).
+                  For images shape=(H, W, C), for audio shape=(N,) or (N, 2).
+        stego:    Container after payload embedding, same shape and dtype.
 
     Returns:
-        PSNR в децибелах (dB). float('inf') — если массивы идентичны
-        (MSE == 0, что означает нулевое искажение).
+        PSNR in decibels (dB). float('inf') if the arrays are identical
+        (MSE == 0, which means zero distortion).
 
     Raises:
-        ValueError: Если shape массивов не совпадает.
+        ValueError: If the array shapes do not match.
     """
     if original.shape != stego.shape:
         raise ValueError(
@@ -65,31 +65,31 @@ def calculate_psnr(original: np.ndarray, stego: np.ndarray) -> float:
 
 
 def calculate_ssim(original: np.ndarray, stego: np.ndarray) -> float:
-    """Вычисляет Structural Similarity Index между контейнерами.
+    """Computes the Structural Similarity Index between containers.
 
-    SSIM — современная метрика воспринимаемого качества изображений.
-    В отличие от PSNR (работающего попиксельно), оценивает структурное
-    сходство в локальных окнах. Диапазон [-1, 1], где 1 — идентичность.
-    Значения >0.95 для LSB-стеганографии считаются неотличимыми визуально.
+    SSIM is a modern metric of perceived image quality.
+    Unlike PSNR (which works pixel by pixel), it estimates structural
+    similarity in local windows. Range [-1, 1], where 1 is identity.
+    Values >0.95 for LSB steganography are treated as visually indistinguishable.
 
     Args:
-        original: Исходный контейнер (np.ndarray, dtype=uint8).
-                  Поддерживаются: 2D grayscale, 3D RGB, 1D/2D audio (без SSIM).
-        stego:    Стего-контейнер той же формы.
+        original: Original container (np.ndarray, dtype=uint8).
+                  Supported: 2D grayscale, 3D RGB, 1D/2D audio (no SSIM).
+        stego:    Stego container of the same shape.
 
     Returns:
-        SSIM в диапазоне [-1, 1]. float nan — если SSIM неприменим
-        к данному типу контейнера (например, 1D-аудио).
+        SSIM in the range [-1, 1]. float nan if SSIM does not apply
+        to this container type (for example, 1D audio).
 
     Raises:
-        ValueError: Если shape массивов не совпадает.
+        ValueError: If the array shapes do not match.
     """
     if original.shape != stego.shape:
         raise ValueError(
             f"Shape mismatch: original={original.shape}, stego={stego.shape}"
         )
 
-    # SSIM пока сделан для 2D/3D-изображений. Для 1D-аудио возвращаем NaN
+    # SSIM is implemented for 2D/3D images for now. For 1D audio return NaN.
     if original.ndim < 2:
         return float("nan")
 
@@ -99,17 +99,17 @@ def calculate_ssim(original: np.ndarray, stego: np.ndarray) -> float:
 
 
 def calculate_size_deviation(original_path: Path, stego_path: Path) -> float:
-    """Вычисляет процентный прирост размера файла после внедрения payload.
+    """Computes the percent growth of the file size after payload embedding.
 
-    Триггер защиты от структурного стегоанализа: если итоговый файл
-    значительно больше оригинала, это явная аномалия, видимая DLP-системами.
+    A trigger against structural steganalysis: if the result file
+    is much larger than the original, that is a clear anomaly visible to DLP systems.
 
     Args:
-        original_path: Путь к исходному контейнеру до операции.
-        stego_path:    Путь к итоговому стего-файлу после операции.
+        original_path: Path to the original container before the operation.
+        stego_path:    Path to the resulting stego file after the operation.
 
     Returns:
-        Процентное отклонение в процентах.
+        Percent deviation.
     """
     size_orig = original_path.stat().st_size
     size_stego = stego_path.stat().st_size
@@ -122,16 +122,16 @@ def evaluate_quality(
     psnr: Optional[float],
     size_deviation: Optional[float],
 ) -> QualityStatus:
-    """Определяет статус качества операции по триггерам.
+    """Determines the operation quality status from the triggers.
 
-    Реализует политику PSNR в проекте:
-        * PSNR >= 40 dB и Deviation <= 30%  -> OK
+    Implements the project PSNR policy:
+        * PSNR >= 40 dB and Deviation <= 30%  -> OK
         * 30 dB <= PSNR < 40 dB               -> WARNING
-        * PSNR < 30 dB или Deviation > 30%  -> ANOMALY
+        * PSNR < 30 dB or Deviation > 30%  -> ANOMALY
 
     Args:
-        psnr:           PSNR в dB или None (метрика недоступна).
-        size_deviation: Прирост размера в % или None.
+        psnr:           PSNR in dB, or None (metric unavailable).
+        size_deviation: Size growth in %, or None.
 
     Returns:
         QualityStatus: OK / WARNING / ANOMALY.

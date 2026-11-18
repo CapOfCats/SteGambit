@@ -1,48 +1,48 @@
 ```markdown
-Чек-лист системного покрытия
+System coverage checklist
 
-## Домен 1: Криптография (Core/Crypto)
-- [ ] Round-trip encrypt/decrypt проходит успешно для разных объемов.
-- [ ] Использование неверного пароля вызывает `InvalidFrameError`.
-- [ ] Повреждение 1 бита в шифротексте или заголовке вызывает ошибку аутентификации.
-- [ ] Компрессия zlib автоматически включается для энтропийно-слабых данных.
+## Domain 1: Cryptography (Core/Crypto)
+- [ ] Encrypt/decrypt round-trip succeeds for different data sizes.
+- [ ] An incorrect password raises `InvalidFrameError`.
+- [ ] Flipping 1 bit in the ciphertext or header causes an authentication error.
+- [ ] zlib compression turns on automatically for low-entropy data.
 
-## Домен 2: Идентификация форматов (FormatIdentifier)
-- [ ] Определение PNG/JPEG/WAV по Magic Bytes корректно.
-- [ ] RIFF-заголовок без подтипа WAVE выбрасывает ошибку (защита от AVI/WebP).
-- [ ] `identify_bytes()` корректно читает извлеченный бинарный блоб (восстановление расширения).
-- [ ] Короткие файлы (<12 байт) обрабатываются без падения (graceful failure).
+## Domain 2: Format identification (FormatIdentifier)
+- [ ] PNG/JPEG/WAV detection by Magic Bytes is correct.
+- [ ] A RIFF header without the WAVE subtype raises an error (protection against AVI/WebP).
+- [ ] `identify_bytes()` correctly reads an extracted binary blob (extension recovery).
+- [ ] Short files (<12 bytes) are handled without a crash (graceful failure).
 
-## Домен 3: LSB Spatial Domain (LsbProcessor)
-- [ ] Векторизованный Round-trip работает на 1D (аудио) и 3D (RGB) `ndarray`.
-- [ ] Модифицируются строго младшие биты (сохранение оригинальной гистограммы).
-- [ ] Выброс исключения при выходе за пределы физического массива.
+## Domain 3: LSB Spatial Domain (LsbProcessor)
+- [ ] Vectorized round-trip works on 1D (audio) and 3D (RGB) `ndarray` values.
+- [ ] Only the least significant bits are modified (the original histogram is preserved).
+- [ ] An exception is raised when the operation goes past the physical array bounds.
 
-## Домен 4: DCT Frequency Domain (DctProcessor)
-- [ ] Round-trip работает на объектах `JpegContainer` без ре-квантования.
-- [ ] Запрещенная зона `{-2, -1, 0, 1}` строго исключается из пула (фикс классического Shrinkage).
-- [ ] Sanity-check: прерывание пайплайна, если Y-канал не изменился (`Zero-Embed`).
+## Domain 4: DCT Frequency Domain (DctProcessor)
+- [ ] Round-trip works on `JpegContainer` objects without re-quantization.
+- [ ] The forbidden zone `{-2, -1, 0, 1}` is strictly excluded from the pool (fix for classic shrinkage).
+- [ ] Sanity check: the pipeline stops if the Y channel did not change (`Zero-Embed`).
 
-## Домен 5: Умная дисперсия (SmartSpreader)
-- [ ] Полный детерминизм координат на основе `seed` из паролей.
-- [ ] LSB-инвариантность (зануление бита `& ~1` перед расчетом пула для избежания сдвига).
-- [ ] Параметр `exclude_coords` корректно отфильтровывает занятые пиксели.
+## Domain 5: Smart spreading (SmartSpreader)
+- [ ] Coordinates are fully deterministic from a `seed` derived from the password.
+- [ ] LSB invariance (the bit is cleared with `& ~1` before the pool is computed, to avoid a shift).
+- [ ] The `exclude_coords` parameter correctly filters out occupied pixels.
 
-## Домен 6: Операции ввода-вывода (Format I/O)
-- [ ] `PngFormat` и `WavFormat` сохраняют тензоры Lossless-алгоритмом.
-- [ ] `JpegFormat` извлекает и сохраняет таблицы Хаффмана нетронутыми.
+## Domain 6: Input/output operations (Format I/O)
+- [ ] `PngFormat` and `WavFormat` store tensors with a lossless algorithm.
+- [ ] `JpegFormat` extracts Huffman tables and stores them unchanged.
 
-## Домен 7: Сервисный фасад (StegoService)
-- [ ] Успешная сквозная интеграция `hide_data` → `extract_data` для всех 3 форматов.
-- [ ] Отлов ошибки Анти-Конверсии (попытка сохранить PNG как JPEG).
-- [ ] Восстановление оригинального расширения payload (например, PNG-в-JPEG → `extracted.png`).
+## Domain 7: Service facade (StegoService)
+- [ ] End-to-end `hide_data` → `extract_data` succeeds for all 3 formats.
+- [ ] The anti-conversion error is caught (an attempt to save PNG as JPEG).
+- [ ] The original payload extension is recovered (for example, PNG-in-JPEG → `extracted.png`).
 
-## Домен 8: Метрики (Metrics) 
-- [ ] Математика PSNR соответствует формуле (10 * log10(MAX^2 / MSE)).
-- [ ] Вычисление SSIM работает корректно через `scikit-image`.
-- [ ] `analyze_capacity` выдает честный CapacityReport с учетом крипто-оверхеда.
+## Domain 8: Metrics
+- [ ] PSNR math matches the formula (10 * log10(MAX^2 / MSE)).
+- [ ] SSIM is computed correctly through `scikit-image`.
+- [ ] `analyze_capacity` returns an honest CapacityReport that accounts for crypto overhead.
 
-## Домен 9: DTO и Модели 
-- [ ] Immutability замороженных датаклассов.
-- [ ] Соответствие Enum-статусов качества (`OK`, `WARNING`, `ANOMALY`).
+## Domain 9: DTO and models
+- [ ] Frozen dataclasses are immutable.
+- [ ] Quality-status enum values match (`OK`, `WARNING`, `ANOMALY`).
 ```

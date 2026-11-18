@@ -1,139 +1,139 @@
-### Условные обозначения
+### Legend
 
-- **А** — Архитектор
-- **BE** — Back-end разработчик
-- **FE** — Front-end разработчик
+- **A** — Architect
+- **BE** — Back-end developer
+- **FE** — Front-end developer
 - **QA** — QA Engineer
-- **—** — Нет активных задач (ожидание зависимостей)
+- **—** — No active tasks (waiting on dependencies)
 
-# План проекта
+# Project plan
 
-## День 1: Инициализация проекта и архитектурное проектирование
+## Day 1: Project initialization and architectural design
 
-| Роль | Задачи |
+| Role | Tasks |
 |------|--------|
-| **А** | Определить структуру проекта; создать `README.md`, `requirements.txt`; утвердить архитектуру: MVC + сервисный слой для стеганографии; выбрать паттерны проектирования (Strategy для алгоритмов, Factory для форматов) |
-| **BE** | Настроить виртуальное окружение (`venv`), инициализировать репозиторий; создать базовую структуру директорий: `src/core`, `src/gui`, `src/utils`, `tests` |
+| **A** | Define the project structure; create `README.md` and `requirements.txt`; approve the architecture: MVC plus a service layer for steganography; choose design patterns (Strategy for algorithms, Factory for formats) |
+| **BE** | Set up a virtual environment (`venv`) and initialize the repository; create the base directory layout: `src/core`, `src/gui`, `src/utils`, `tests` |
 | **FE** | — |
 | **QA** | — |
 
 ---
 
-## День 2: Проектирование API стеганографических модулей и UI-макетов
+## Day 2: Steganography-module API design and UI mockups
 
-| Роль | Задачи |
+| Role | Tasks |
 |------|--------|
-| **А** | Спроектировать интерфейсы `SteganographyEngine`, `EncryptionService`; определить контракты методов `encode()`, `decode()`, `analyze_capacity()`; задокументировать архитектурные решения в `ARCHITECTURE.md` |
-| **BE** | Создать абстрактные классы в `src/core/base.py`: `StegoAlgorithm`, `FileFormat`; реализовать структуру для поддержки форматов (PNG, JPEG, WAV) |
-| **FE** | Создать макеты UI в Figma/прототипе: главное окно, диалог кодирования, диалог декодирования, окно настроек; определить wireframe для отображения метрик |
+| **A** | Design the `SteganographyEngine` and `EncryptionService` interfaces; define the contracts for `encode()`, `decode()`, and `analyze_capacity()`; document the architectural decisions in `ARCHITECTURE.md` |
+| **BE** | Create abstract classes in `src/core/base.py`: `StegoAlgorithm`, `FileFormat`; implement the structure that supports PNG, JPEG, and WAV |
+| **FE** | Create UI mockups in Figma or a prototype: main window, encode dialog, decode dialog, settings window; define a wireframe for the metrics display |
 | **QA** | — |
 
 ---
 
-## День 3: Реализация LSB-алгоритма для изображений
+## Day 3: LSB algorithm for images
 
-| Роль | Задачи |
+| Role | Tasks |
 |------|--------|
-| **А** | Проверить архитектурные решения; помочь с выбором битовой глубины для LSB |
-| **BE** | Реализовать `LSBStego` класс в `src/core/algorithms/lsb.py`: методы `encode(image, data, key)` и `decode(stego_image, key)`; интегрировать `Pillow` для работы с пикселями; реализовать преобразование данных в битовый поток |
+| **A** | Review the architectural decisions; help choose the bit depth for LSB |
+| **BE** | Implement the `LSBStego` class in `src/core/algorithms/lsb.py`: methods `encode(image, data, key)` and `decode(stego_image, key)`; integrate `Pillow` for pixel access; convert the data into a bit stream |
 | **FE** | — |
 | **QA** | — |
 
 ---
 
-## День 4: Реализация шифрования (AES-256) и интеграция
+## Day 4: Encryption (AES-256) and integration
 
-| Роль | Задачи |
+| Role | Tasks |
 |------|--------|
-| **А** | Консультировать по выбору режима шифрования (CBC vs GCM); проверить безопасность реализации |
-| **BE** | Реализовать `EncryptionService` в `src/core/crypto.py`: AES-256 шифрование/дешифрование с использованием `cryptography`; реализовать `HashService` для SHA-512; интегрировать шифрование в LSB-пайплайн: `data → encrypt → encode` |
-| **FE** | Начать настройку PyQt6-проекта; создать главное окно (`MainWindow`) с базовой структурой меню |
+| **A** | Advise on the encryption mode (CBC vs GCM); review the security of the implementation |
+| **BE** | Implement `EncryptionService` in `src/core/crypto.py`: AES-256 encryption and decryption with `cryptography`; implement `HashService` for SHA-512; integrate encryption into the LSB pipeline: `data → encrypt → encode` |
+| **FE** | Start the PyQt6 project; create the main window (`MainWindow`) with a basic menu structure |
 | **QA** | — |
 
 ---
 
-## День 5: Поддержка форматов JPEG и аудио (WAV)
+## Day 5: JPEG and audio (WAV) support
 
-| Роль | Задачи |
+| Role | Tasks |
 |------|--------|
-| **A** | Проверить корректность реализации для разных форматов; обсудить выбор методов для WAV (DCT-стеганография) |
-| **BE** | Реализовать `WavStego` с использованием DCT-метода в `src/core/algorithms/dct.py`; реализовать `WavStego` (DCT в аудио-семплах) в `src/core/algorithms/audio_dct.py`; Аналогично - с LSB в JPEG + добавить поддержку BMP как резервного формата; создать `FormatFactory` для автоматического выбора алгоритма по расширению файла |
-| **FE** | Продолжить разработку GUI: добавить виджеты выбора файлов, поля ввода ключа, переключатели режимов (кодирование/декодирование) |
+| **A** | Check that the implementation is correct for each format; discuss the method for WAV (DCT steganography) |
+| **BE** | Implement `WavStego` with the DCT method in `src/core/algorithms/dct.py`; implement `WavStego` (DCT on audio samples) in `src/core/algorithms/audio_dct.py`; do the same for LSB in JPEG, and add BMP as a fallback format; create `FormatFactory` so the algorithm is chosen from the file extension |
+| **FE** | Continue the GUI: file-picker widgets, key fields, and mode switches (encode/decode) |
 | **QA** | — |
 
 ---
 
-## День 6: Реализация метрик качества и оптимизация
+## Day 6: Quality metrics and optimization
 
-| Роль | Задачи |
+| Role | Tasks |
 |------|--------|
-| **A** | Проверить соответствие метрикам из EPP (PSNR ≥ 40 dB); утвердить методы оценки |
-| **BE** | Реализовать `QualityMetrics` в `src/utils/metrics.py`: расчёт PSNR, SSIM; добавить профилирование с `cProfile`; оптимизировать LSB-внедрение до требования ≤ 1 сек/2МБ; реализовать проверку ёмкости (`analyze_capacity()`) |
-| **FE** | Создать виджет отображения метрик: PSNR, размер файла, время обработки; добавить визуализацию «до/после» (сравнение пикселей) |
-| **QA** | Начать написание плана тестирования (`tests/plan.md`): определить тест-кейсы для каждого формата и метода |
+| **A** | Check compliance with the EPP metrics (PSNR ≥ 40 dB); approve the evaluation methods |
+| **BE** | Implement `QualityMetrics` in `src/utils/metrics.py`: PSNR and SSIM; add profiling with `cProfile`; optimize LSB embedding to ≤ 1 sec/2 MB; implement the capacity check (`analyze_capacity()`) |
+| **FE** | Build a metrics widget: PSNR, file size, processing time; add a before/after view (pixel comparison) |
+| **QA** | Start the test plan (`tests/plan.md`): define test cases for each format and method |
 
 ---
 
-## День 7: Frontend — основной интерфейс и интеграция с backend
+## Day 7: Frontend — main interface and backend integration
 
-| Роль | Задачи |
+| Role | Tasks |
 |------|--------|
-| **A** | Проверить архитектурную совместимость между GUI и core-модулями |
-| **BE** | Создать API-слой `src/api/service.py` для связи GUI и core; реализовать асинхронные методы (для тяжёлых операций); добавить логирование через `loguru` |
-| **FE** | Реализовать полный UI главного окна: панель выбора режима, загрузка файлов, отображение превью; добавить progress bar для индикации процесса; сверстать диалоговые окна (о программе, настройки) |
-| **QA** | Написать unit-тесты для core-модулей (`tests/test_lsb.py`, `tests/test_crypto.py`); подготовить тестовые данные (изображения, аудио) |
+| **A** | Check that the GUI and the core modules are architecturally compatible |
+| **BE** | Create the API layer `src/api/service.py` between the GUI and the core; add asynchronous methods for heavy operations; add logging with `loguru` |
+| **FE** | Implement the full main-window UI: mode panel, file loading, preview; add a progress bar; lay out the dialogs (about, settings) |
+| **QA** | Write unit tests for the core modules (`tests/test_lsb.py`, `tests/test_crypto.py`); prepare test data (images, audio) |
 
 ---
 
-## День 8: Frontend — фичи «до/после» и визуализация
+## Day 8: Frontend — before/after features and visualization
 
-| Роль | Задачи |
+| Role | Tasks |
 |------|--------|
 | **A** | — |
-| **BE** | Добавить методы для извлечения метаданных файла (размер, формат, разрешение); реализовать экспорт логов операций |
-| **FE** | Реализовать виджет сравнения «до/после»: два изображения рядом, слайдер для наложения; добавить возможность масштабирования; реализовать отображение гистограмм (анализ искажений); создать экспорт результатов (скриншоты, отчёты) |
-| **QA** | Продолжить написание тестов; добавить тесты для JPEG- и WAV-стеганографии |
+| **BE** | Add methods that read file metadata (size, format, resolution); implement export of operation logs |
+| **FE** | Implement the before/after comparison widget: two images side by side, a slider for the overlay; add zoom; show histograms (distortion analysis); export results (screenshots, reports) |
+| **QA** | Continue the tests; add coverage for JPEG and WAV steganography |
 
 ---
 
-## День 9: Интеграция, обработка ошибок, UI-полировка
+## Day 9: Integration, error handling, UI polish
 
-| Роль | Задачи |
+| Role | Tasks |
 |------|--------|
-| **A** | Финальная проверка архитектуры; убедиться в соблюдении всех требований EPP |
-| **BE** | Реализовать полную обработку ошибок: неверный ключ, превышение ёмкости, повреждённый файл; добавить валидацию входных данных через `pydantic`; написать документацию к API в docstrings |
-| **FE** | Добавить красивые сообщения об ошибках (QMessageBox); реализовать тёмную/светлую тему; добавить анимации загрузки; провести юзабилити-тестирование |
-| **QA** | Начать интеграционное тестирование: проверить полный цикл «кодирование → декодирование» для всех форматов |
+| **A** | Final architecture review; confirm that every EPP requirement is met |
+| **BE** | Implement full error handling: wrong key, capacity exceeded, corrupted file; validate input with `pydantic`; document the API in docstrings |
+| **FE** | Add clear error messages (QMessageBox); implement dark and light themes; add loading animations; run usability testing |
+| **QA** | Start integration testing: the full encode → decode cycle for every format |
 
 ---
 
-## День 10: QA — комплексное тестирование
+## Day 10: QA — comprehensive testing
 
-| Роль | Задачи |
+| Role | Tasks |
 |------|--------|
 | **A** | — |
-| **BE** | Исправить баги, найденные QA; оптимизировать производительность по результатам тестов |
-| **FE** | Исправить UI-баги; улучшить отзывчивость интерфейса |
-| **QA** | Провести полное функциональное тестирование: все форматы, все режимы (кодирование/декодирование); провести нагрузочное тестирование (файлы 1–100 МБ); проверить метрики: PSNR, время обработки; протестировать граничные условия (максимальная ёмкость, неверный ключ); написать финальный отчёт о тестировании |
+| **BE** | Fix the bugs found by QA; optimize performance from the test results |
+| **FE** | Fix UI bugs; improve interface responsiveness |
+| **QA** | Full functional testing: every format, every mode (encode/decode); load testing (files of 1–100 MB); check PSNR and processing time; test boundary conditions (maximum capacity, wrong key); write the final test report |
 
 ---
 
-## День 11: Сборка, документация, подготовка к презентации
+## Day 11: Build, documentation, presentation prep
 
-| Роль | Задачи |
+| Role | Tasks |
 |------|--------|
-| **A** | Проверить финальную архитектуру; подготовить презентацию архитектурных решений |
-| **BE** | Собрать приложение в .exe через PyInstaller; написать `USER_GUIDE.md`; задокументировать все методы в `docs/` |
-| **FE** | Создать иконку приложения; зафиксировать финальный UI-скриншот для документации |
-| **QA** | Финальное регрессионное тестирование; проверить работоспособность .exe; составить список известных ограничений |
+| **A** | Review the final architecture; prepare a presentation of the architectural decisions |
+| **BE** | Package the application as an .exe with PyInstaller; write `USER_GUIDE.md`; document every method in `docs/` |
+| **FE** | Create the application icon; capture the final UI screenshot for the documentation |
+| **QA** | Final regression testing; verify that the .exe runs; list the known limitations |
 
 ---
 
-## День 12: Финализация и сдача проекта
+## Day 12: Finalization and project delivery
 
-| Роль | Задачи |
+| Role | Tasks |
 |------|--------|
-| **A** | Схемы, защита, изложение архитектурного видения. |
-| **BE** | DEMO backend-возможностей (алгоритмы, шифрование); исправить последние мелкие замечания |
-| **FE** | Demo GUI; убедиться в стабильности приложения на целевой машине |
-| **QA** | Подготовить отчёт о тестировании для включения в курсовую; провести финальную проверку всех требований EPP |
+| **A** | Diagrams, the defense, and a presentation of the architectural vision. |
+| **BE** | DEMO of the backend capabilities (algorithms, encryption); fix the last minor remarks |
+| **FE** | Demo the GUI; confirm the application is stable on the target machine |
+| **QA** | Prepare the test report for the course paper; do a final check of every EPP requirement |

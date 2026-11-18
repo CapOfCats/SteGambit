@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 class DecodePanel(QWidget):
-    """Вкладка DECODE главного окна."""
+    """DECODE tab of the main window."""
 
     request_extract = pyqtSignal()
 
@@ -22,12 +22,12 @@ class DecodePanel(QWidget):
         root.setSpacing(10)
         root.setContentsMargins(10, 10, 10, 10)
 
-        # Группа File to Extract
+        # File to Extract group
         group = QGroupBox("File to Extract Data From:")
         grid = QGridLayout(group)
         grid.setColumnStretch(1, 1)
 
-        # Stego-файл
+        # Stego file
         grid.addWidget(QLabel("File to Extract Data From:"), 0, 0)
         self.edit_stego = QLineEdit()
         self.edit_stego.setPlaceholderText("Select stego file...")
@@ -36,7 +36,7 @@ class DecodePanel(QWidget):
         btn_stego.clicked.connect(self._browse_stego)
         grid.addWidget(btn_stego, 0, 2)
 
-        # Пароль
+        # Password
         grid.addWidget(QLabel("Enter Decryption Password:"), 1, 0)
         pass_row = QHBoxLayout()
         self.edit_password = QLineEdit()
@@ -58,7 +58,7 @@ class DecodePanel(QWidget):
         pass_row.addWidget(self.chk_use_coords)
         grid.addLayout(pass_row, 1, 1, 1, 2)
 
-        # Папка сохранения
+        # Save folder
         grid.addWidget(QLabel("Save Extracted Payload To:"), 2, 0)
         self.edit_output = QLineEdit()
         self.edit_output.setPlaceholderText("Select output directory...")
@@ -69,7 +69,7 @@ class DecodePanel(QWidget):
 
         root.addWidget(group)
 
-        # Кнопка Extract
+        # Extract button
         btn_row = QHBoxLayout()
         btn_row.addStretch()
         self.btn_extract = QPushButton("🔓 EXTRACT & RECOVER DATA")
@@ -80,7 +80,7 @@ class DecodePanel(QWidget):
         btn_row.addStretch()
         root.addLayout(btn_row)
 
-        # Лог метрик
+        # Metrics log
         self.log_box = QTextEdit()
         self.log_box.setReadOnly(True)
         self.log_box.setPlaceholderText(

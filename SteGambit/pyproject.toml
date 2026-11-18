@@ -49,10 +49,10 @@ markers = [
     "smoke: critical end‑to‑end scenarios",
     "integration: tests involving multiple modules",
     "io: tests touching real file system / external libraries",
-    "smoke: критичные сценарии, прогоняются всегда",
-    "slow: тесты дольше 1 секунды",
-    "integration: тесты с реальным I/O и полным pipeline",
-    "load: Нагрузочные, с большими файлами (скипается по умолчанию, но можно запустить по марке -m load)"
+    "smoke: critical scenarios, always run",
+    "slow: tests longer than 1 second",
+    "integration: tests with real I/O and the full pipeline",
+    "load: load tests with large files (skipped by default, but can be run with the -m load marker)"
 ]
 addopts = [
     "--strict-markers",

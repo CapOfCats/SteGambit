@@ -1,80 +1,80 @@
-# ADR 003: Модель емкости контейнеров (Capacity Analysis) и управление деградацией LSB
+# ADR 003: Carrier Capacity Model (Capacity Analysis) and LSB Degradation Control
 
-**Дата:** 2026-03-24
-**Статус:** Утверждено
-**Контекст:** Реализация метода `analyze_capacity()` в модуле `services/analytics/` и математическое ограничение деградации медиафайлов.
+**Date:** 2026-03-24
+**Status:** Approved
+**Context:** Implementation of `analyze_capacity()` in `services/analytics/` and a mathematical bound on media-file degradation.
 
-## 1. Проблематика
-Система должна заранее (до этапа шифрования и сокрытия) ответить на вопрос: "Поместится ли файл B (Payload) внутрь файла A (Container) с сохранением качества PSNR ≥ 40 dB?". Нам нужно жесткое математическое правило, по которому `CapacityAnalyzer` будет блокировать ползунки в GUI (механизм Dry Run).
+## 1. Problem
+Before encryption and embedding, the system must answer: "Will file B (payload) fit inside file A (carrier) while keeping PSNR ≥ 40 dB?". A hard mathematical rule is required so that `CapacityAnalyzer` can disable GUI sliders (the dry-run mechanism).
 
-## 2. Архитектурное и математическое обоснование емкости (LSB)
+## 2. Architectural and Mathematical Justification of Capacity (LSB)
 
-При использовании пространственного метода LSB (Least Significant Bit), мы модифицируем младшие биты каждого байта контейнера.
+With the spatial LSB (Least Significant Bit) method, the least significant bits of each carrier byte are modified.
 
-Для изображения-контейнера в формате RGB, преобразованного в `numpy.ndarray`:
-- Размерность массива: `[Width, Height, Channels]`. 
-- Общее количество доступных байт (пикселей * каналы): $N_{bytes} = W \times H \times C$.
+For an RGB carrier image converted to `numpy.ndarray`:
+- Array shape: `[Width, Height, Channels]`.
+- Total available bytes (pixels * channels): $N_{bytes} = W \times H \times C$.
 
-**Теоретическая емкость ($E_{max}$):**
-Если мы используем 1 бит на каждый цветовой канал (1 LSB), то в один байт контейнера мы можем спрятать ровно 1 бит полезной нагрузки. 
-Формула чистой емкости в байтах:
+**Theoretical capacity ($E_{max}$):**
+If 1 bit is used per color channel (1 LSB), exactly 1 payload bit can be hidden in one carrier byte.
+Pure capacity in bytes:
 $$E_{max} = \lfloor \frac{N_{bytes}}{8} \rfloor$$
 
-**Накладные расходы (Overhead):**
-Наша архитектура "Defense-in-Depth" подразумевает обязательное использование `AES-GCM`.
-- `Nonce` (вектор инициализации): 12 байт.
-- `MAC Tag` (тег аутентификации): 16 байт.
-- Заголовок с размером оригинального payload (чтобы `extract` знал, когда остановиться): 8 байт (unsigned long long).
-*Итого константный Overhead:* $O_{crypto} = 36$ байт.
+**Overhead:**
+The Defense-in-Depth architecture requires `AES-GCM`.
+- `Nonce` (initialization vector): 12 bytes.
+- `MAC Tag` (authentication tag): 16 bytes.
+- Header with the original payload size (so `extract` knows when to stop): 8 bytes (unsigned long long).
+*Total constant overhead:* $O_{crypto} = 36$ bytes.
 
-**Финальная формула доступной емкости ($Capacity$):**
+**Final available-capacity formula ($Capacity$):**
 $$Capacity = E_{max} - O_{crypto}$$
 
-*Любой Payload, размер которого превышает $Capacity$, должен отторгаться системой на этапе валидации (Бизнес-Процесс: БП-1).*
+*Any payload whose size exceeds $Capacity$ must be rejected at validation (business process: BP-1).*
 
-## 3. Обоснование деградации и уровня шума (PSNR)
+## 3. Degradation and Noise-Level Justification (PSNR)
 
-Согласно ТЗ, мы обязаны держать **PSNR ≥ 40 dB**.
+Per the requirements, **PSNR ≥ 40 dB** must be maintained.
 
-*Математическая справка:*
+*Mathematical note:*
 $$PSNR = 10 \cdot \log_{10}\left(\frac{MAX_I^2}{MSE}\right)$$
-Где $MAX_I = 255$, а $MSE$ — среднеквадратичная ошибка.
+Where $MAX_I = 255$, and $MSE$ is the mean squared error.
 
-- **Сценарий 1 (Использование 1 младшего бита):** При псевдослучайной замене 1 младшего бита (LSB1), математическое ожидание ошибки на каждый модифицированный пиксель равно $MSE = 0.5$.
-  При $MSE = 0.5$: 
+- **Scenario 1 (using 1 least significant bit):** With a pseudo-random replacement of 1 least significant bit (LSB1), the expected error per modified pixel is $MSE = 0.5$.
+  At $MSE = 0.5$:
   $$PSNR = 10 \cdot \log_{10}\left(\frac{65025}{0.5}\right) \approx 51.13 \text{ dB}$$
-  *Вывод:* 1-bit LSB абсолютно безопасен. Даже при 100% заполнении контейнера PSNR будет ~51 dB, что с запасом перекрывает требование ≥40 dB.
+  *Conclusion:* 1-bit LSB is fully safe. Even at 100% carrier fill, PSNR is ~51 dB, which comfortably exceeds the ≥40 dB requirement.
 
-- **Сценарий 2 (Использование 2 младших битов - LSB2):** Если пользователь захочет увеличить емкость (Degradation Override), математическое ожидание $MSE$ возрастает до $2.5$.
-  При $MSE = 2.5$:
+- **Scenario 2 (using 2 least significant bits — LSB2):** If the user wants more capacity (degradation override), the expected $MSE$ rises to $2.5$.
+  At $MSE = 2.5$:
   $$PSNR = 10 \cdot \log_{10}\left(\frac{65025}{2.5}\right) \approx 44.15 \text{ dB}$$
-  *Вывод:* 2-bit LSB всё еще легально и пролезает в рамки ТЗ (≥ 40 dB), но визуальные артефакты на градиентах (особенно в темных областях) могут стать заметными.
+  *Conclusion:* 2-bit LSB is still within the requirements (≥ 40 dB), but visual artifacts on gradients (especially in dark regions) can become noticeable.
 
-**Архитектурное решение:** 
-По умолчанию `analyze_capacity()` должен использовать профиль **1-bit LSB (Strict Mode)**. Если payload не влезает, сервис отдает `False`. Механизм LSB2 оставляем как фичу для версии 2.0 (или опциональной галочки "High Capacity Mode" в настройках, если успеем).
+**Architectural decision:**
+By default, `analyze_capacity()` must use the **1-bit LSB (Strict Mode)** profile. If the payload does not fit, the service returns `False`. LSB2 is left as a feature for version 2.0 (or an optional "High Capacity Mode" checkbox in settings, if time allows).
 
-## 4. Контракт для Backend-разработчика
+## 4. Contract for the Backend Developer
 
-В модуле `services/analytics/capacity.py` (или соответствующем классе) должна быть реализована функция вида:
+In `services/analytics/capacity.py` (or the corresponding class), a function of the following form must be implemented:
 
 ```python
 def analyze_capacity(container_matrix: np.ndarray, payload_size_bytes: int, lsb_depth: int = 1) -> bool:
     """
-    Проверяет возможность внедрения payload_size_bytes в container_matrix.
-    :param container_matrix: numpy массив контейнера.
-    :param payload_size_bytes: размер скрываемого файла в байтах.
-    :param lsb_depth: количество используемых младших битов (по умолчанию 1).
-    :return: True, если скрытие возможно не нарушая PSNR > 40dB, иначе False.
+    Checks whether payload_size_bytes can be embedded into container_matrix.
+    :param container_matrix: numpy array of the carrier.
+    :param payload_size_bytes: size of the file to hide, in bytes.
+    :param lsb_depth: number of least significant bits used (default 1).
+    :return: True if embedding is possible without violating PSNR > 40dB, otherwise False.
     """
     overhead = 36 # AES Nonce (12) + MAC (16) + SizeHeader (8)
     
-    # 1. Считаем доступные биты внутри матрицы
+    # 1. Count available bits inside the matrix
     total_container_bits = container_matrix.size * lsb_depth
     
-    # 2. Переводим в байты
+    # 2. Convert to bytes
     max_capacity_bytes = total_container_bits // 8
     
-    # 3. Вычитаем крипто-оверхед
+    # 3. Subtract crypto overhead
     available_bytes = max_capacity_bytes - overhead
     
     return payload_size_bytes <= available_bytes

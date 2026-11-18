@@ -1,8 +1,8 @@
-"""Unit-тесты для FormatIdentifier.
+"""Unit tests for FormatIdentifier.
 
-Тестовые данные:
-    * Валидные файлы — из tests/artifacts/ - read-only.
-    * Невалидные файлы — генерируются в tmp_path.
+Test data:
+    * Valid files — from tests/artifacts/, read-only.
+    * Invalid files — generated in tmp_path.
 """
 from pathlib import Path
 import pytest
@@ -18,7 +18,7 @@ def identifier():
 
 
 class TestIdentifyValidFiles:
-    """Положительные сценарии: каждый поддерживаемый формат — отдельный класс эквивалентности."""
+    """Positive scenarios: each supported format is its own equivalence class."""
 
     @pytest.mark.parametrize("filename, expected_fmt", [
         ("small.png", "PNG"),
@@ -31,7 +31,7 @@ class TestIdentifyValidFiles:
 
 
 class TestIdentifyInvalidFiles:
-    """Negative-сценарии для identify() - все исключения из документации."""
+    """Negative scenarios for identify() — every exception from the documentation."""
 
     def test_file_not_found_raises(self, identifier, tmp_path):
         non_existent = tmp_path / "ghost.png"
@@ -39,21 +39,21 @@ class TestIdentifyInvalidFiles:
             identifier.identify(non_existent)
 
     def test_garbage_bytes_raise_value_error(self, identifier, tmp_path):
-        """Файл со случайными байтами - формат неопознаваем."""
+        """A file of random bytes — the format is unrecognizable."""
         broken = tmp_path / "garbage.bin"
         broken.write_bytes(b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b")
         with pytest.raises(ValueError, match="Unsupported or unknown format"):
             identifier.identify(broken)
 
     def test_riff_but_not_wave_raises(self, identifier, tmp_path):
-        """RIFF - это контейнер. Проверяем защиту от AVI/WebP под видом WAV."""
+        """RIFF is a container. We check the guard against AVI/WebP disguised as WAV."""
         fake_avi = tmp_path / "fake.wav"
         fake_avi.write_bytes(b"RIFF\x00\x00\x00\x00AVI \x00\x00")
         with pytest.raises(ValueError, match="RIFF контейнер не является WAVE"):
             identifier.identify(fake_avi)
 
     def test_empty_file_raises(self, identifier, tmp_path):
-        """Пустой файл - header пустой, magic не совпадает."""
+        """An empty file — the header is empty, magic does not match."""
         empty = tmp_path / "empty.bin"
         empty.write_bytes(b"")
         with pytest.raises(ValueError, match="Unsupported or unknown format"):
@@ -61,7 +61,7 @@ class TestIdentifyInvalidFiles:
 
 
 class TestErrorMessages:
-    """Контракт UX: identify() добавляет имя файла к ошибке, identify_bytes - нет."""
+    """UX contract: identify() appends the file name to the error, identify_bytes does not."""
 
     def test_identify_appends_filename_to_error(self, identifier, tmp_path):
         broken = tmp_path / "weird_name_42.bin"
@@ -70,7 +70,7 @@ class TestErrorMessages:
             identifier.identify(broken)
 
     def test_identify_bytes_does_not_include_filename(self, identifier):
-        """identify_bytes работает с буфером - без имени файла."""
+        """identify_bytes works on a buffer — no file name."""
         with pytest.raises(ValueError) as exc_info:
             identifier.identify_bytes(b"NOT_VALID_DATA")
         assert ".bin" not in str(exc_info.value)
@@ -78,7 +78,7 @@ class TestErrorMessages:
 
 
 class TestIdentifyBytes:
-    """Тесты для identify_bytes."""
+    """Tests for identify_bytes."""
 
     @pytest.mark.parametrize("header, expected_fmt", [
         (b"\x89PNG\r\n\x1a\n" + b"\x00" * 4, "PNG"),
@@ -98,39 +98,39 @@ class TestIdentifyBytes:
 
 
 class TestIdentifyBytesBoundary:
-    """Граничные тесты identify_bytes: что происходит на границах 0, 4, 8, 11, 12, 13 байт."""
+    """Boundary tests of identify_bytes: what happens at the edges of 0, 4, 8, 11, 12, 13 bytes."""
 
     def test_empty_buffer_raises(self, identifier):
-        """0 байт — самый маленький край границы."""
+        """0 bytes — the smallest edge of the boundary."""
         with pytest.raises(ValueError):
             identifier.identify_bytes(b"")
 
     def test_short_buffer_padded_with_zeros(self, identifier):
-        """Короткий меджик 8 байт - функция должна дополнить нулями до 12 и распознать."""
+        """A short 8-byte magic — the function must pad with zeros to 12 and recognize it."""
         png_magic_only = b"\x89PNG\r\n\x1a\n"
         assert identifier.identify_bytes(png_magic_only) == "PNG"
 
     def test_exact_read_bytes_size(self, identifier):
-        """Ровно 12 байт - размер из константы. Дополнение нулями не нужно."""
+        """Exactly 12 bytes — the size from the constant. Zero padding is not needed."""
         data = b"\x89PNG\r\n\x1a\n\x00\x00\x00\x00"
         assert len(data) == 12
         assert identifier.identify_bytes(data) == "PNG"
 
     def test_one_byte_short_of_riff_subtype(self, identifier):
-        """RIFF + 7 байт — недостаточно для проверки WAVE-субтипа. Дополняется нулями -> не WAVE."""
+        """RIFF + 7 bytes — not enough to check the WAVE subtype. Padded with zeros -> not WAVE."""
         data = b"RIFF\x00\x00\x00"
         with pytest.raises(ValueError, match="RIFF"):
             identifier.identify_bytes(data)
 
     def test_buffer_larger_than_read_bytes_truncated(self, identifier):
-        """Буфер длиннее 12 байт - берётся только первые 12, остальное игнорируется."""
+        """A buffer longer than 12 bytes — only the first 12 are taken, the rest is ignored."""
         long_data = b"\x89PNG\r\n\x1a\n\x00\x00\x00\x00" + b"GARBAGE_TAIL" * 100
         assert identifier.identify_bytes(long_data) == "PNG"
 
 
 
 class TestGetDefaultExtension:
-    """Тест утилиты маппинга format."""
+    """Test of the format-mapping helper."""
 
     @pytest.mark.parametrize("fmt, expected_ext", [
         ("PNG", ".png"),
@@ -145,7 +145,7 @@ class TestGetDefaultExtension:
         "TEXT",
         "PDF",
         "",
-        "png", # тут плюсом нижний регистр - будет считаться неизвестным, тоже необходимая проверка
+        "png", # lowercase is also treated as unknown; this check is required too
     ])
     def test_unknown_formats_default_to_bin(self, unknown_fmt):
         assert get_default_extension(unknown_fmt) == ".bin"

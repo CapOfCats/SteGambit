@@ -1,7 +1,7 @@
-"""Unit-тесты для StegoService stego_service.py.
+"""Unit tests for StegoService in stego_service.py.
 
-Тесты изолируют сервис от core-компонентов через моки. Полный цикл покрыт в test_smoke_pipeline.py — здесь проверяем
-только оркестрацию, ветвление и обработку ошибок.
+Tests isolate the service from core components via mocks. The full cycle is covered in test_smoke_pipeline.py — here we check
+only orchestration, branching, and error handling.
 """
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -22,11 +22,11 @@ def service():
 
 @pytest.fixture
 def png_request(tmp_path):
-    """Минимальный валидный StegoTaskRequest для PNG.
+    """Minimal valid StegoTaskRequest for PNG.
 
-    Создаёт файлы-заглушки только для прохождения валидации __post_init__.
-    Содержимое НЕ декодируется как PNG. Для тестов, которым нужен реальный
-    PNG-декодинг, используется глобальная фикстура png_medium из conftest.py.
+    Creates stub files only so __post_init__ validation passes.
+    The contents are NOT decoded as PNG. Tests that need real
+    PNG decoding use the global png_medium fixture from conftest.py.
     """
     carrier = tmp_path / "carrier.png"
     payload = tmp_path / "payload.bin"
@@ -48,10 +48,10 @@ def payload_file(tmp_path):
 
 @pytest.fixture
 def carrier_png(tmp_path):
-    """Путь к фейковому PNG-файлу для DTO-валидации.
+    """Path to a fake PNG file for DTO validation.
 
-    Содержимое — только magic bytes PNG, не валидный PNG для декодинга.
-    Используется в тестах analyze_capacity, где PngFormat замокан.
+    Contents are only the PNG magic bytes, not a valid PNG for decoding.
+    Used in analyze_capacity tests where PngFormat is mocked.
     """
     path = tmp_path / "carrier.png"
     path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
@@ -59,7 +59,7 @@ def carrier_png(tmp_path):
 
 @pytest.fixture
 def mock_png_handler():
-    """Мок-класс PngFormat, возвращает ndarray-заглушку."""
+    """Mock PngFormat class that returns a stub ndarray."""
     handler_instance = MagicMock()
     handler_instance.load.return_value = np.zeros(100_000, dtype=np.uint8)
     handler_cls = MagicMock(return_value=handler_instance)
@@ -67,10 +67,10 @@ def mock_png_handler():
 
 
 class TestAntiConversionPolicy:
-    """Политика анти-конверсии: формат носителя должен совпадать с расширением в выхлопе."""
+    """Anti-conversion policy: the carrier format must match the extension of the output."""
 
     def test_png_carrier_to_jpeg_output_raises(self, service, png_request, tmp_path):
-        """Негативный кейз: PNG → .jpeg запрещено."""
+        """Negative case: PNG → .jpeg is forbidden."""
         modified = StegoTaskRequest(
             carrier_path=png_request.carrier_path,
             payload_path=png_request.payload_path,
@@ -82,7 +82,7 @@ class TestAntiConversionPolicy:
                 service.hide_data(modified)
 
     def test_jpeg_carrier_to_png_output_raises(self, service, tmp_path):
-        """Негативный кейз: JPEG → .png запрещено."""
+        """Negative case: JPEG → .png is forbidden."""
         carrier = tmp_path / "carrier.jpg"
         payload = tmp_path / "payload.bin"
         carrier.write_bytes(b"\xff\xd8\xff" + b"\x00" * 100)
@@ -105,9 +105,9 @@ class TestAntiConversionPolicy:
         ("WAV", ".wav"),
     ])
     def test_matching_format_and_extension_pass_policy(self, service, fmt, ext, tmp_path):
-        """Положительный кейз: совпадающий формат-расширение проходит политику.
+        """Positive case: a matching format and extension passes the policy.
 
-        Проверяем, что ошибка возникает НЕ из-за анти-конверсии а позже при отсутствия реального файла.
+        We check that the error is NOT caused by anti-conversion, but later by the absence of a real file.
         """
         carrier = tmp_path / f"carrier{ext}"
         payload = tmp_path / "payload.bin"
@@ -127,7 +127,7 @@ class TestAntiConversionPolicy:
 
 
 class TestUnsupportedFormat:
-    """Негативный кейз: формат не в _FORMAT_REGISTRY."""
+    """Negative case: format is not in _FORMAT_REGISTRY."""
 
     def test_hide_unsupported_format_raises(self, service, tmp_path):
         carrier = tmp_path / "x.bmp"
@@ -163,10 +163,10 @@ class TestUnsupportedFormat:
 
 
 class TestExtractDataErrors:
-    """Негативные кейсы extract_data."""
+    """Negative cases for extract_data."""
 
     def test_missing_magic_raises_invalid_frame(self, service, png_request):
-        """Негативный кейз: заголовок без MAGIC -> InvalidFrameError."""
+        """Negative case: a header without MAGIC -> InvalidFrameError."""
         with patch.object(service._identifier, "identify", return_value="PNG"), \
              patch("stegambit.services.stego_service._FORMAT_REGISTRY") as mock_registry:
             mock_handler = MagicMock()
@@ -182,7 +182,7 @@ class TestExtractDataErrors:
 
 
 class TestGetAlgorithmForFormat:
-    """Утилита get_algorithm_for_format - тут Таблица решений."""
+    """The get_algorithm_for_format helper — a decision table."""
 
     @pytest.mark.parametrize("fmt, expected", [
         ("PNG", "LSB"),
@@ -190,20 +190,20 @@ class TestGetAlgorithmForFormat:
         ("JPEG", "DCT"),
     ])
     def test_known_formats(self, service, fmt, expected):
-        """Эквивалентность: каждый известный формат - свой алгоритм."""
+        """Equivalence: each known format maps to its own algorithm."""
         assert service.get_algorithm_for_format(fmt) == expected
 
     @pytest.mark.parametrize("unknown", ["BMP", "GIF", "", "png", "unknown"])
     def test_unknown_format_returns_question_mark(self, service, unknown):
-        """Негативный кейз: неизвестный формат."""
+        """Negative case: an unknown format."""
         assert service.get_algorithm_for_format(unknown) == "?"
 
 
 class TestIdentifyFormat:
-    """Публичная обёртка над FormatIdentifier.identify."""
+    """Public wrapper over FormatIdentifier.identify."""
 
     def test_delegates_to_identifier(self, service, tmp_path):
-        """identify_format пробрасывает в FormatIdentifier."""
+        """identify_format delegates to FormatIdentifier."""
         fake_path = tmp_path / "test.png"
         with patch.object(service._identifier, "identify", return_value="PNG") as mock_id:
             result = service.identify_format(fake_path)
@@ -212,17 +212,17 @@ class TestIdentifyFormat:
 
 
 class TestBuildPool:
-    """Тесты приватного _build_pool: ветвление LSB и DCT."""
+    """Tests of private _build_pool: LSB and DCT branching."""
 
     def test_lsb_pool_is_arange(self, service):
-        """LSB-пул — np.arange(container.size)."""
+        """The LSB pool is np.arange(container.size)."""
         container = np.zeros((10, 10, 3), dtype=np.uint8)
         pool, processor = service._build_pool("LSB", container)
         np.testing.assert_array_equal(pool, np.arange(container.size))
         assert processor is service._processor
 
     def test_dct_pool_delegates_to_dct_processor(self, service):
-        """DCT-пул строится через DctProcessor.get_embeddable_positions."""
+        """The DCT pool is built via DctProcessor.get_embeddable_positions."""
         fake_container = MagicMock()
         expected_pool = np.array([10, 20, 30], dtype=np.int64)
         with patch.object(service._dct, "get_embeddable_positions",
@@ -233,16 +233,16 @@ class TestBuildPool:
             assert processor is service._dct
 
     def test_unknown_processor_kind_raises(self, service):
-        """Негативный кейз: неизвестный тип процессора - RuntimeError."""
+        """Negative case: an unknown processor kind raises RuntimeError."""
         with pytest.raises(RuntimeError, match="Неизвестный тип процессора"):
             service._build_pool("UNKNOWN", np.zeros(10))
 
 
 class TestAnalyzeCapacity:
-    """Тесты analyze_capacity — предварительная оценка ёмкости без сокрытия."""
+    """Tests of analyze_capacity — a preliminary capacity estimate without hiding."""
 
     def test_returns_capacity_report(self, service, payload_file, carrier_png, tmp_path, mock_png_handler):
-        """analyze_capacity возвращает CapacityReport."""
+        """analyze_capacity returns a CapacityReport."""
         png_cls, _ = mock_png_handler
         request = StegoTaskRequest(
             carrier_path=carrier_png,
@@ -258,7 +258,7 @@ class TestAnalyzeCapacity:
             assert isinstance(report, CapacityReport)
 
     def test_fits_true_when_capacity_sufficient(self, service, payload_file, carrier_png, tmp_path, mock_png_handler):
-        """Положительный кейз: capacity > required -> fits=True."""
+        """Positive case: capacity > required -> fits=True."""
         png_cls, _ = mock_png_handler
         request = StegoTaskRequest(
             carrier_path=carrier_png,
@@ -276,7 +276,7 @@ class TestAnalyzeCapacity:
             assert report.algorithm == "LSB"
 
     def test_fits_false_on_overflow(self, service, payload_file, carrier_png, tmp_path, mock_png_handler):
-        """Негативный кейз: required > capacity -> fits=False."""
+        """Negative case: required > capacity -> fits=False."""
         png_cls, handler = mock_png_handler
         handler.load.return_value = np.zeros(100, dtype=np.uint8)
         request = StegoTaskRequest(
@@ -294,7 +294,7 @@ class TestAnalyzeCapacity:
             assert report.utilization_percent > 100.0
 
     def test_utilization_zero_when_capacity_is_zero(self, service, payload_file, carrier_png, tmp_path, mock_png_handler):
-        """Граничный кейз: capacity=0 -> utilization=0 - защита от деления на ноль."""
+        """Boundary case: capacity=0 -> utilization=0 — guards against division by zero."""
         png_cls, handler = mock_png_handler
         handler.load.return_value = np.zeros(10, dtype=np.uint8)
         request = StegoTaskRequest(
@@ -312,7 +312,7 @@ class TestAnalyzeCapacity:
             assert report.fits is False
 
     def test_jpeg_delegates_to_dct_spreader(self, service, payload_file, tmp_path):
-        """Для JPEG ёмкость считается через DctSpreader."""
+        """For JPEG, capacity is computed via DctSpreader."""
         carrier = tmp_path / "c.jpg"
         carrier.write_bytes(b"\xff\xd8\xff" + b"\x00" * 100)
 
@@ -338,7 +338,7 @@ class TestAnalyzeCapacity:
             assert report.capacity_bits == 50_000
 
     def test_unsupported_format_raises(self, service, payload_file, tmp_path):
-        """Негативный кейз: неподдерживаемый формат -> CompatibilityError."""
+        """Negative case: an unsupported format -> CompatibilityError."""
         carrier = tmp_path / "c.bmp"
         carrier.write_bytes(b"BM" + b"\x00" * 100)
 

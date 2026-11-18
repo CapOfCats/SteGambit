@@ -1,55 +1,55 @@
-# Архитектура метрик и оценка качества (Evaluation Methods)
+# Metrics Architecture and Quality Assessment (Evaluation Methods)
 
-**Контекст:** Оценка эффективности стеганографической системы базируется на двух конфликтующих параметрах: визуальной/аудиальной прозрачности - (здесь -Imperceptibility) и ёмкости (здесь - Capacity). Для автоматизированного контроля этих параметров в ядро системы SteGambit внедрен модуль аналитики.
+**Context:** Effectiveness of a steganographic system rests on two conflicting parameters: visual/auditory transparency (here — Imperceptibility) and capacity (here — Capacity). An analytics module was added to the SteGambit core for automated control of these parameters.
 
-## 1. Математические профили метрик
+## 1. Mathematical Metric Profiles
 
-Система использует объективные математические метрики для сравнения оригинального контейнера ($C$) и модифицированного стего-контейнера ($S$).
+The system uses objective mathematical metrics to compare the original carrier ($C$) and the modified stego-carrier ($S$).
 
 ### 1.1. Mean Squared Error (MSE)
-Среднеквадратичная ошибка вычисляет усредненную сумму разностей между исходным и измененным состояниями. Базовая формула для вычисления в пространственном домене:
+Mean squared error computes the averaged sum of differences between the original and modified states. The base formula in the spatial domain:
 
 $$MSE = \frac{1}{M \cdot N} \sum_{i=1}^{M} \sum_{j=1}^{N} (C_{i,j} - S_{i,j})^2$$
 
-*Где:*
-* $M, N$ — размерности матрицы данных.
-* $C_{i,j}$ — значение элемента исходного контейнера.
-* $S_{i,j}$ — значение элемента стего-контейнера.
+*Where:*
+* $M, N$ — dimensions of the data matrix.
+* $C_{i,j}$ — element value of the original carrier.
+* $S_{i,j}$ — element value of the stego-carrier.
 
-*Архитектурная деталь:* Для многомерных массивов (RGB, Stereo WAV) MSE вычисляется как среднее по всем размерностям.
+*Architectural detail:* For multidimensional arrays (RGB, stereo WAV), MSE is computed as the mean across all dimensions.
 
 ### 1.2. Peak Signal-to-Noise Ratio (PSNR)
-Пиковое отношение сигнала к шуму. Основная метрика искажения, измеряемая в децибелах (dB). Вычисляется на основе MSE:
+Peak signal-to-noise ratio. The primary distortion metric, measured in decibels (dB). Computed from MSE:
 
 $$PSNR = 10 \cdot \log_{10} \left( \frac{MAX^2}{MSE} \right)$$
 
-*Где:*
-* $MAX$ — максимально возможное значение элемента (для 8-битного изображения = 255).
-* Если $MSE = 0$ (контейнеры идентичны), $PSNR \to \infty$.
+*Where:*
+* $MAX$ — the maximum possible element value (255 for an 8-bit image).
+* If $MSE = 0$ (the carriers are identical), $PSNR \to \infty$.
 
-### 1.3. Отклонение размера (Size Deviation)
-Оценка оверхеда контейнера. Метрика используется как триггер защиты от структурного стегоанализа (изменение энтропии файла).
+### 1.3. Size Deviation
+Estimate of carrier overhead. The metric is used as a trigger that protects against structural steganalysis (a change in file entropy).
 
 $$Deviation (\%) = \frac{Size_S - Size_C}{Size_C} \cdot 100$$
 
 ---
 
-## 2. Архитектурные триггеры качества
+## 2. Architectural Quality Triggers
 
-Для автоматизации QA в пайплайне SteGambit настроены жесткие "триггеры качества". Фасад (`StegoService`) и UI-слой принимают решения на основе следующих пороговых значений:
+Hard "quality triggers" are configured for QA automation in the SteGambit pipeline. The facade (`StegoService`) and the UI layer make decisions from the following thresholds:
 
-### Триггер 1: Визуальная прозрачность (PSNR Threshold)
-Определяет статус операции на основе уровня внесенного шума.
-* **PSNR $\ge$ 40 dB:** `[ УСПЕХ ]` Отличная прозрачность. Изменения гарантированно незаметны для HVS (Human Visual System) и HAS (Human Auditory System). Процесс помечается как безопасный.
-* **30 dB $\le$ PSNR $<$ 40 dB:** `[ ПРЕДУПРЕЖДЕНИЕ ]` Приемлемое качество, но потенциально обнаружимо статистическими методами (попадание в зону риска). UI генерирует warning (желтый цвет).
-* **PSNR $<$ 30 dB:** `[ АНОМАЛИЯ ]` Недопустимый уровень деградации. Стего-контейнер визуально/аудиально искажен. UI помечает операцию красным (`???`).
+### Trigger 1: Visual Transparency (PSNR Threshold)
+Sets the operation status from the level of introduced noise.
+* **PSNR $\ge$ 40 dB:** `[ SUCCESS ]` Excellent transparency. Changes are guaranteed to be imperceptible to the HVS (Human Visual System) and the HAS (Human Auditory System). The process is marked safe.
+* **30 dB $\le$ PSNR $<$ 40 dB:** `[ WARNING ]` Acceptable quality, but potentially detectable by statistical methods (inside the risk zone). The UI raises a warning (yellow).
+* **PSNR $<$ 30 dB:** `[ ANOMALY ]` Unacceptable degradation. The stego-carrier is visually or audibly distorted. The UI marks the operation red (`???`).
 
-### Триггер 2: Аномалия идентичности (Infinite PSNR Zero-Embed)
-* **Условие:** Если рассчитанный $MSE = 0$ ($PSNR = \infty$).
-* **Действие системы:** Выброс исключения `RuntimeError("Zero-Embed")`.
-* **Обоснование:** Если после отработки пайплайна массивы полностью идентичны, это означает архитектурный сбой (Payload не был записан). Провал стеганографии.
+### Trigger 2: Identity Anomaly (Infinite PSNR Zero-Embed)
+* **Condition:** Computed $MSE = 0$ ($PSNR = \infty$).
+* **System action:** Raise `RuntimeError("Zero-Embed")`.
+* **Rationale:** If the arrays are fully identical after the pipeline runs, that is an architectural failure (the payload was not written). Steganography failed.
 
-### Триггер 3: Структурная аномалия (Capacity Overflow)
-* **Условие:** $Deviation > 30\%$.
-* **Действие системы:** Принудительное оповещение пользователя.
-* **Обоснование:** Сильное увеличение размера файла непропорционально оригинальной обложке является главным маркером для классических антивирусов и систем DLP (Data Loss Prevention).
+### Trigger 3: Structural Anomaly (Capacity Overflow)
+* **Condition:** $Deviation > 30\%$.
+* **System action:** Force a notification to the user.
+* **Rationale:** A large file-size increase out of proportion to the original carrier is the main marker for classic antivirus products and DLP (Data Loss Prevention) systems.

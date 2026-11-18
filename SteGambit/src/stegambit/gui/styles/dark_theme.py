@@ -347,6 +347,6 @@ STATUS_STYLES = {
 }
 
 def apply_dark_theme(app) -> None:
-    """Применить тёмную тему к QApplication."""
+    """Apply the dark theme to QApplication."""
     app.setStyle("Fusion")
     app.setStyleSheet(DARK_QSS)

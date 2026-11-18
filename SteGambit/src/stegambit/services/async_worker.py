@@ -1,17 +1,17 @@
-"""StegoWorker — фоновый поток для тяжёлых операций StegoService.
+"""StegoWorker — background thread for heavy StegoService operations.
 
-Архитектурная база: ADR 008 "Модель многопоточности и изоляция GUI".
+Architectural basis: ADR 008 "Threading model and GUI isolation".
 
-Контракт с GUI:
-    Сигналы:
-        - finished(StegoResponse) — операция завершилась.
-        - error(str) — инфраструктурная авария (исключение, не пойманное
-          бизнес-логикой). Используется для критических сбоев типа OOM, повреждённой инсталляции зависимостей и т.п.
-    Запуск: worker.start() — стандартный метод QThread, ставит поток
-      в очередь Qt event loop. Тело выполнится в методе run().
+Contract with the GUI:
+    Signals:
+        - finished(StegoResponse) — the operation finished.
+        - error(str) — infrastructure failure (an exception not caught
+          by business logic). Used for critical failures such as OOM, a broken dependency install, and similar.
+    Start: worker.start() — the standard QThread method, queues the thread
+      on the Qt event loop. The body runs in run().
 
-    Базовый класс QObject -> QThread.
-    GUI не блокируется на время операции — главный event loop Qt продолжает обрабатывать события.
+    Base class QObject -> QThread.
+    The GUI is not blocked during the operation — the main Qt event loop keeps processing events.
 """
 from PyQt6.QtCore import QThread, pyqtSignal
 
@@ -27,42 +27,42 @@ logger = get_logger(__name__)
 
 
 class StegoWorker(QThread):
-    """Сигналы:
-        finished: успешная операция ИЛИ ожидаемая ошибка CompatibilityError, неверный пароль.
-        erro: неожиданное исключение уровня инфраструктуры.
+    """Signals:
+        finished: a successful operation OR an expected error (CompatibilityError, wrong password).
+        error: an unexpected infrastructure-level exception.
     """
 
     finished = pyqtSignal(StegoResponse)
     error = pyqtSignal(str)
 
     def __init__(self, request: StegoTaskRequest, mode: str) -> None:
-        """Инициализация worker'а в главном потоке.
+        """Initializes the worker on the main thread.
 
         Args:
-            request: Замороженный DTO с параметрами операции.
-            mode:    "encode" или "decode".
+            request: Frozen DTO with operation parameters.
+            mode:    "encode" or "decode".
 
         Note:
-            Тяжёлые объекты (StegoService) создаются в run(), а не здесь,
-            чтобы не нагружать момент создания worker'а в UI-потоке.
+            Heavy objects (StegoService) are created in run(), not here,
+            so worker creation on the UI thread stays cheap.
         """
         super().__init__()
         self._request = request
         self._mode = mode
 
     def run(self) -> None:
-        """Точка входа фонового потока.
+        """Entry point of the background thread.
 
-        Вызывается автоматически после QThread.start(). Выполняется в
-        отдельном потоке OS — никаких прямых обращений к UI отсюда!
+        Called automatically after QThread.start(). Runs on a
+        separate OS thread — no direct UI access from here.
 
-        Любой результат (успех, ожидаемая ошибка, авария) уезжает в
-        главный поток через сигналы.
+        Any result (success, expected error, failure) is delivered to
+        the main thread via signals.
         """
-        # Сервис создаётся ВНУТРИ run(), уже в фоновом потоке.
-        # Это снимает нагрузку с момента старта worker'а и гарантирует,
-        # что внутренние ресурсы сервиса (если такие появятся) принадлежат
-        # этому потоку.
+        # The service is created INSIDE run(), already on the background thread.
+        # This keeps worker startup light and guarantees that
+        # any internal service resources (if they appear later) belong
+        # to this thread.
         service = StegoService()
 
         try:
@@ -89,26 +89,26 @@ class StegoWorker(QThread):
             self.finished.emit(response)
 
         except CompatibilityError as e:
-            # Ожидаемая бизнес-ошибка: некорректный формат, нарушение анти-конверсии, недостаточная ёмкость.
+            # Expected business error: bad format, anti-conversion violation, insufficient capacity.
             logger.warning(f"{self._mode} compatibility error: {e}")
             self.finished.emit(StegoResponse(success=False, error=str(e)))
 
         except InvalidFrameError as e:
-            # Ожидаемая ошибка извлечения: неверный пароль, файл без скрытых данных, повреждённый носитель.
+            # Expected extraction error: wrong password, file with no hidden data, corrupted carrier.
             logger.warning(f"{self._mode} invalid frame: {e}")
             self.finished.emit(StegoResponse(success=False, error=str(e)))
         
         except InvalidPasswordError as e:
-            # Ожидаемая ошибка: AES-GCM MAC mismatch. Неверный пароль или битые данные.
+            # Expected error: AES-GCM MAC mismatch. Wrong password or corrupt data.
             logger.warning(f"{self._mode} invalid password: {e}")
             self.finished.emit(StegoResponse(success=False, error=str(e)))
 
         except CorruptedCarrierError as e:
-            # Ожидаемая ошибка: повреждённый файл.
+            # Expected error: corrupted file.
             logger.warning(f"{self._mode} corrupted carrier: {e}")
             self.finished.emit(StegoResponse(success=False, error=str(e)))
 
         except Exception as e:
-            # Повреждённый файл, ошибка крипты, баг в ядре. critical-error через отдельный сигнал.
+            # Corrupted file, crypto error, core bug. Critical error via a separate signal.
             logger.exception(f"{self._mode} crashed")
             self.error.emit(f"Внутренняя ошибка: {e}")

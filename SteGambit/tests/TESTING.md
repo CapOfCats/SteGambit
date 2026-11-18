@@ -1,29 +1,29 @@
-# Гайд по тестированию SteGambit
+# SteGambit testing guide
 
-Документ описывает структуру тестов, способы запуска, фикстуры и известные ограничения.
+This document describes the test layout, how to run the tests, the fixtures, and known limitations.
 
-## Содержание
+## Contents
 
-- [Структура тестов](#структура-тестов)
-- [Запуск тестов](#запуск-тестов)
-- [Маркеры pytest](#маркеры-pytest)
+- [Test structure](#test-structure)
+- [Running tests](#running-tests)
+- [pytest markers](#pytest-markers)
 - [Coverage](#coverage)
-- [Фикстуры](#фикстуры)
-- [Артефакты](#артефакты)
-- [Соглашения и принципы](#соглашения-и-принципы)
+- [Fixtures](#fixtures)
+- [Artifacts](#artifacts)
+- [Conventions and principles](#conventions-and-principles)
 - [Troubleshooting](#troubleshooting)
 
 ---
 
-## Структура тестов
+## Test structure
 tests/
-├── conftest.py # Корневые фикстуры (artifacts_dir, safe_png, safe_jpeg, safe_wav, rng, и т.д.)
-├── TESTING.md # Этот документ
-├── artifacts/ # Read-only эталонные файлы
-│ ├── carriers/ # Тестовые носители (PNG/JPEG/WAV)
-│ └── payloads/ # Тестовые payload-файлы (PDF/ZIP/TXT)
+├── conftest.py # Root fixtures (artifacts_dir, safe_png, safe_jpeg, safe_wav, rng, and so on)
+├── TESTING.md # This document
+├── artifacts/ # Read-only reference files
+│ ├── carriers/ # Test carriers (PNG/JPEG/WAV)
+│ └── payloads/ # Test payload files (PDF/ZIP/TXT)
 │
-├── unit/ # Unit-тесты (зеркало src/stegambit/)
+├── unit/ # Unit tests (mirror of src/stegambit/)
 │ ├── models/
 │ │ └── test_dto.py
 │ ├── core/
@@ -40,82 +40,82 @@ tests/
 │ └── test_metrics.py
 │
 └── integration/
-└── test_smoke_pipeline.py # Сквозные smoke-тесты пайплайна
+└── test_smoke_pipeline.py # End-to-end pipeline smoke tests
 
 
 
-**Принцип зеркала:** структура `tests/unit/` повторяет `src/stegambit/`. Новый модуль в `src/` — соответствующий файл `test_*.py` в `tests/unit/`.
+**Mirror principle:** the `tests/unit/` layout repeats `src/stegambit/`. A new module in `src/` gets a matching `test_*.py` file in `tests/unit/`.
 
 ---
 
-## Запуск тестов
+## Running tests
 
-### Все тесты
+### All tests
 pytest
 
 
 
-### Только unit
+### Unit only
 pytest tests/unit
 
 
 
-### Только smoke
+### Smoke only
 pytest tests/integration -m smoke
 
 
 
-### Конкретный модуль
+### A specific module
 pytest tests/unit/core/test_lsb_processor.py
 
 
 
-### Конкретный класс или тест
+### A specific class or test
 pytest tests/unit/core/test_lsb_processor.py::TestRoundTrip
 pytest tests/unit/core/test_lsb_processor.py::TestRoundTrip::test_round_trip_various_sizes
 
 
 
-### Verbose режим
+### Verbose mode
 pytest -v
 
 
 
-### Остановиться на первом падении
+### Stop on the first failure
 pytest -x
 
 
 
 ---
 
-## Маркеры pytest
+## pytest markers
 
-Маркеры зарегистрированы в `pyproject.toml` (или `pytest.ini`):
+Markers are registered in `pyproject.toml` (or `pytest.ini`):
 
-| Маркер | Назначение | Когда применяется |
+| Marker | Purpose | When it applies |
 |---|---|---|
-| `smoke` | Минимальный сквозной набор | Критичные сценарии в `tests/integration/` |
-| `integration` | Интеграционные тесты | Тесты, использующие несколько модулей одновременно |
-| `io` | Тесты, использующие реальную ФС / внешние библиотеки (PIL, wave, jpeglib) | Format I/O тесты |
+| `smoke` | Minimal end-to-end set | Critical scenarios in `tests/integration/` |
+| `integration` | Integration tests | Tests that use several modules at once |
+| `io` | Tests that use the real filesystem / external libraries (PIL, wave, jpeglib) | Format I/O tests |
 
-### Примеры запуска по маркерам
+### Examples of running by marker
 
-Только быстрые тесты (без I/O):
+Fast tests only (no I/O):
 pytest tests/unit -m "not io"
 
 
 
-Только I/O тесты:
+I/O tests only:
 pytest tests/unit -m "io"
 
 
 
-Только smoke:
+Smoke only:
 pytest -m smoke
 
 
 
-Комбинации:
+Combinations:
 pytest -m "smoke and not io"
 
 
@@ -124,21 +124,21 @@ pytest -m "smoke and not io"
 
 ## Coverage
 
-### Замер покрытия
+### Measure coverage
 pytest tests/unit --cov=src/stegambit --cov-report=term-missing
 
 
 
-### HTML-отчёт
+### HTML report
 pytest tests/unit --cov=src/stegambit --cov-report=html
 
 
 
-После прогона открыть `htmlcov/index.html` в браузере.
+After the run, open `htmlcov/index.html` in a browser.
 
-### Целевые цифры покрытия
+### Coverage targets
 
-| Модуль | Минимум | Идеал |
+| Module | Minimum | Ideal |
 |---|---|---|
 | `models/dto.py` | 100% | 100% |
 | `core/common/format_id.py` | 95% | 100% |
@@ -149,39 +149,39 @@ pytest tests/unit --cov=src/stegambit --cov-report=html
 | `services/stego_service.py` | 75% | 85% |
 | `services/metrics.py` | 90% | 100% |
 
-Coverage < 100% допустим для платформенно-специфичных веток, внешних I/O и dead code.
+Coverage below 100% is acceptable for platform-specific branches, external I/O, and dead code.
 
 ---
 
-## Фикстуры
+## Fixtures
 
-Все общие фикстуры — в корневом `tests/conftest.py`. Локальные фикстуры (используемые в одном файле) — внутри тестового модуля.
+All shared fixtures live in the root `tests/conftest.py`. Local fixtures (used in a single file) live inside that test module.
 
-### Корневые фикстуры
+### Root fixtures
 
-| Фикстура | Назначение | Scope |
+| Fixture | Purpose | Scope |
 |---|---|---|
-| `artifacts_dir` | Путь к `tests/artifacts/` | session |
-| `carriers_dir` | Путь к `tests/artifacts/carriers/` | session |
-| `payloads_dir` | Путь к `tests/artifacts/payloads/` | session |
-| `safe_png` | Копия PNG-носителя в `tmp_path` | function |
-| `safe_jpeg` | Копия JPEG-носителя в `tmp_path` (обход бага jpeglib + кириллица) | function |
-| `safe_wav` | Копия WAV-носителя в `tmp_path` | function |
-| `rng` | Детерминированный `np.random.default_rng(seed=42)` | function |
+| `artifacts_dir` | Path to `tests/artifacts/` | session |
+| `carriers_dir` | Path to `tests/artifacts/carriers/` | session |
+| `payloads_dir` | Path to `tests/artifacts/payloads/` | session |
+| `safe_png` | Copy of the PNG carrier in `tmp_path` | function |
+| `safe_jpeg` | Copy of the JPEG carrier in `tmp_path` (workaround for the jpeglib bug with Cyrillic paths) | function |
+| `safe_wav` | Copy of the WAV carrier in `tmp_path` | function |
+| `rng` | Deterministic `np.random.default_rng(seed=42)` | function |
 
-### Принцип "safe-копий"
+### Safe-copy principle
 
-Артефакты в `tests/artifacts/` **read-only** — тесты не должны их мутировать. Все фикстуры `safe_*` копируют файл в `tmp_path` через хелпер `_copy_artifact()`. Это:
+Files in `tests/artifacts/` are **read-only** — tests must not mutate them. Every `safe_*` fixture copies the file into `tmp_path` through the `_copy_artifact()` helper. This:
 
-1. Защищает эталоны от случайной мутации.
-2. Обходит баг `jpeglib` с кириллицей в путях на Windows (см. [Troubleshooting](#troubleshooting)).
-3. Обеспечивает автоматическую очистку через pytest.
+1. Protects the reference files from accidental mutation.
+2. Works around the `jpeglib` bug with Cyrillic in paths on Windows (see [Troubleshooting](#troubleshooting)).
+3. Provides automatic cleanup through pytest.
 
 ---
 
-## Артефакты
+## Artifacts
 
-В `tests/artifacts/` лежат **эталонные** файлы. Структура:
+`tests/artifacts/` holds the **reference** files. Layout:
 artifacts/
 ├── carriers/
 │ ├── photo.png
@@ -194,34 +194,34 @@ artifacts/
 
 
 
-### Добавление нового артефакта
+### Adding a new artifact
 
-1. Положить файл в нужную подпапку.
-2. При необходимости — добавить фикстуру в `tests/conftest.py` через `_copy_artifact()`.
-3. Использовать в тестах через фикстуру, **не** через прямой путь.
+1. Place the file in the appropriate subdirectory.
+2. If needed, add a fixture in `tests/conftest.py` via `_copy_artifact()`.
+3. Use it in tests through the fixture, **not** through a direct path.
 
-**Запрещено:** модифицировать артефакты в тестах. Используй `safe_*` копии.
+**Do not** modify artifacts inside tests. Use the `safe_*` copies.
 
 ---
 
-## Соглашения и принципы
+## Conventions and principles
 
-### Техники тест-дизайна
+### Test design techniques
 
-Каждый тест должен явно указывать применённую технику в первой строке docstring:
+Each test must name the technique used in the first line of its docstring:
 
-- **Equivalence** — разбиение на классы эквивалентности.
-- **Boundary** / **Граничный кейз** — граничные значения.
-- **Negative** / **Негативный кейз** — проверка `raises`.
-- **Property** — инвариант (свойство).
-- **Decision Table** — таблица решений.
-- **Round-trip** — обратимость операции.
-- **State-based** — проверка изменения состояния.
+- **Equivalence** — partitioning into equivalence classes.
+- **Boundary** — boundary values.
+- **Negative** — an expected `raises` check.
+- **Property** — an invariant (property).
+- **Decision Table** — a decision table.
+- **Round-trip** — operation reversibility.
+- **State-based** — checking a state change.
 
 ### TROUBLESHOOTING 
 ----
 **Warning PytestUnknownMarkWarning**
-Маркер не зарегистрирован в pyproject.toml. Добавь в секцию:
+The marker is not registered in pyproject.toml. Add it to this section:
 
 
 [tool.pytest.ini_options]

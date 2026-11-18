@@ -5,48 +5,48 @@
 ![Cryptography](https://img.shields.io/badge/Security-AES--GCM--256-red.svg)
 ![License](https://img.shields.io/badge/License-MIT-purple.svg)
 
-**SteGambit** - это кроссплатформенный инструмент для безопасного сокрытия файлов внутри других файлов - **стеганография "File-in-File"** с использованием криптографической защиты. Проект реализует продвинутые алгоритмы внедрения данных в изображения (PNG, JPEG) и аудио (WAV), обеспечивая высокую визуальную и статистическую незаметность.
+**SteGambit** is a cross-platform tool for securely hiding files inside other files — **"File-in-File" steganography** with cryptographic protection. The project implements advanced embedding algorithms for images (PNG, JPEG) and audio (WAV), with high visual and statistical imperceptibility.
 
-## 🌟 Ключевые возможности
+## 🌟 Key features
 
-* **Мультиформатность:** Поддержка `PNG` и `WAV` (пространственное/временное LSB-внедрение) и `JPEG` (частотное JSteg-внедрение в DCT-коэффициенты).
-* **Content-Aware Spreading (LSB):** Встроенный детектор границ (Edge Detection) анализирует градиенты изображения и автоматически избегает "гладких" областей, внедряя скрытые данные только в шумные участки для защиты от визуальных атак.
-* **Строгая криптография (AEAD):** Перед внедрением любой файл шифруется алгоритмом **AES-GCM-256**. Ключи генерируются на основе пароля с использованием **PBKDF2 (SHA-256)** с уникальной солью.
-* **Детерминированный хаос (PRNG):** Координаты внедрения псевдослучайно перемешиваются. Сидом (seed) для генератора выступает криптографический хеш пароля, что делает невозможным извлечение (или даже обнаружение) данных без знания исходной секретной фразы.
-* **Встроенная аналитика:** Автоматический расчет метрик качества: **PSNR**, **SSIM** (опционально) и процента отклонения размера файла.
+* **Multi-format support:** `PNG` and `WAV` (spatial/temporal LSB embedding) and `JPEG` (frequency-domain JSteg embedding into DCT coefficients).
+* **Content-Aware Spreading (LSB):** A built-in edge detector (Edge Detection) analyzes image gradients and automatically avoids "smooth" regions, embedding the hidden data only in noisy areas to resist visual attacks.
+* **Strict cryptography (AEAD):** Before embedding, every file is encrypted with **AES-GCM-256**. Keys are derived from the password with **PBKDF2 (SHA-256)** and a unique salt.
+* **Deterministic chaos (PRNG):** Embedding coordinates are shuffled pseudo-randomly. The generator seed is a cryptographic hash of the password, so extraction (or even detection) is impossible without the original secret phrase.
+* **Built-in analytics:** Automatic quality metrics: **PSNR**, **SSIM** (optional), and the percentage deviation of the file size.
 
 ---
 
-## 📸 Интерфейс // User Guide
+## 📸 Interface // User Guide
 
-SteGambit спроектирован по принципу "Сложно внутри — просто снаружи". Главное окно предоставляет быстрый доступ к процессам кодирования и декодирования.
+SteGambit is designed around the principle "Complex on the inside — simple on the outside". The main window gives quick access to encoding and decoding.
 
-### 1. Оценка совместимости и скрытие (ENCODE PANEL)
-![Главное окно - Encode Workflow](docs/images/encodePanel.jpg)
-1. Выберите файл-контейнер (**Carrier File**).
-2. Выберите файл для сокрытия (**Payload File**).
-3. Нажмите `Check Compatibility`. Ядро математически оценит ёмкость контейнера: для PNG анализируется количество edge-пикселей, для JPEG — наличие доступных среднечастотных AC-коэффициентов.
-4. Если статус `FITS`, нажмите `HIDE DATA`.
-5. В открывшемся диалоге введите пароль и выберите путь сохранения.
+### 1. Compatibility check and hiding (ENCODE PANEL)
+![Main window - Encode Workflow](docs/images/encodePanel.jpg)
+1. Select the carrier file (**Carrier File**).
+2. Select the file to hide (**Payload File**).
+3. Click `Check Compatibility`. The core mathematically estimates the carrier capacity: for PNG it counts edge pixels; for JPEG it checks for usable mid-frequency AC coefficients.
+4. If the status is `FITS`, click `HIDE DATA`.
+5. In the dialog that opens, enter a password and choose the save path.
 
 ![Encode Dialog](docs/images/encodeDialog.jpg)
 
-### 2. Извлечение данных (DECODE PANEL)
-![Вкладка Decode](docs/images/decodeTab.jpg)
-1. Выберите зараженный (stego) файл.
-2. Укажите папку для выгрузки.
-3. Введите пароль, использованный при сокрытии.
-4. Нажмите `Extract Data`. Система проверит Magic Bytes зашифрованного фрейма и целостность тега аутентификации MAC (AES-GCM), после чего восстановит исходный файл с оригинальным расширением.
+### 2. Data extraction (DECODE PANEL)
+![Decode tab](docs/images/decodeTab.jpg)
+1. Select the infected (stego) file.
+2. Specify the output folder.
+3. Enter the password used for embedding.
+4. Click `Extract Data`. The system checks the Magic Bytes of the encrypted frame and the integrity of the AES-GCM authentication tag (MAC), then restores the original file with its original extension.
 
-### 3. Конфигурация и Метрики качества
-В меню `⚙ Settings` можно отключить тяжелые визуальные метрики (SSIM) для ускорения работы или управлять уровнем логирования. А после каждого внедрения выводится панель `AnalyticsAnalyzer`:
-![Панель метрик](docs/images/metricsPanel.jpg)
+### 3. Configuration and quality metrics
+In the `⚙ Settings` menu you can turn off heavy visual metrics (SSIM) to speed up processing, or control the logging level. After each embedding the `AnalyticsAnalyzer` panel is shown:
+![Metrics panel](docs/images/metricsPanel.jpg)
 
 ---
 
-## 🛠 Техническая архитектура (Under the Hood)
+## 🛠 Technical architecture (Under the Hood)
 
-SteGambit построен по принципу **Clean Architecture** с чёткой границей между слоями:
+SteGambit follows **Clean Architecture**, with a clear boundary between layers:
 
 ```text
 ┌─────────────────────────────────────────────────────────┐
@@ -58,13 +58,13 @@ SteGambit построен по принципу **Clean Architecture** с чё�
                              ▼
 ┌─────────────────────────────────────────────────────────┐
 │                  Async Layer (QThread)                  │
-│  StegoWorker — изолирует тяжёлые операции от UI-потока  │
+│  StegoWorker — isolates heavy work from the UI thread   │
 └─────────────────────────────────────────────────────────┘
                              │
                              ▼
 ┌─────────────────────────────────────────────────────────┐
 │                 Service Layer (Facade)                  │
-│ StegoService — оркестрация: validate → crypto →         │
+│ StegoService — orchestration: validate → crypto →       │
 │ spread → embed → save → metrics                         │
 └─────────────────────────────────────────────────────────┘
                              │
@@ -83,11 +83,11 @@ SteGambit построен по принципу **Clean Architecture** с чё�
                      └──────────────┘
 ```
 
-GUI **не знает** про `numpy`, `AES` или `DCT-коэффициенты`. Service-слой **не знает** про `QtWidgets`. Связь — через DTO (`StegoTaskRequest` / `StegoResponse`).
+The GUI **knows nothing** about `numpy`, `AES`, or `DCT coefficients`. The service layer **knows nothing** about `QtWidgets`. They communicate through DTOs (`StegoTaskRequest` / `StegoResponse`).
 
-### Криптографический фрейм
+### Cryptographic frame
 
-Перед внедрением payload оборачивается в `CryptoFrame` — самоописываемый бинарный блок:
+Before embedding, the payload is wrapped in a `CryptoFrame` — a self-describing binary block:
 
 ```text
 ┌────────┬───────┬──────────┬───────────┬─────────┬──────────────────────┐
@@ -97,141 +97,141 @@ GUI **не знает** про `numpy`, `AES` или `DCT-коэффициент
   "STGB"   v1.0     random      random    big-end       AES-GCM-256
 ```
 
-- **MAGIC** — сигнатура `STGB`. При extract проверяется первой: если не совпала — либо пароль неверный, либо файл не содержит payload.
-- **SALT** — случайные 128 бит (16 байт). Подаются в PBKDF2 вместе с паролем — гарантирует, что один и тот же пароль на двух разных стего-файлах даёт **разные** AES-ключи.
-- **NONCE** — IV для AES-GCM (12 байт, требование стандарта NIST SP 800-38D).
-- **LENGTH** — длина ciphertext в байтах. Позволяет читать ровно столько бит при extract, не больше.
-- **CIPHERTEXT + GCM-TAG** — зашифрованный payload + 16-байтовый authentication tag. Любое изменение даже одного бита ciphertext'а приводит к ошибке `InvalidTag` при decrypt — это и есть детектор тампера.
+- **MAGIC** — the `STGB` signature. Checked first on extraction: if it does not match, either the password is wrong or the file contains no payload.
+- **SALT** — 128 random bits (16 bytes). Fed into PBKDF2 together with the password, so the same password on two different stego files yields **different** AES keys.
+- **NONCE** — the IV for AES-GCM (12 bytes, as required by NIST SP 800-38D).
+- **LENGTH** — ciphertext length in bytes. Extraction reads exactly that many bits, and no more.
+- **CIPHERTEXT + GCM-TAG** — the encrypted payload plus a 16-byte authentication tag. Changing even one bit of the ciphertext raises `InvalidTag` on decrypt — that is the tamper detector.
 
 ### LSB Spreading (PNG/WAV)
 
-Наивный LSB пишет биты в первые N пикселей подряд — это палится статистическим χ²-тестом за миллисекунды. **SmartSpreader** делает три вещи:
+Naive LSB writes bits into the first N pixels in a row, and a statistical χ²-test detects that in milliseconds. **SmartSpreader** does three things:
 
-1. **Edge detection** — оператор Собеля по grayscale-проекции, отбрасывает гладкие области (где LSB-шум виден глазу).
-2. **Pool pruning** — фильтрует кандидатов: остаются только пиксели с высоким градиентом.
-3. **Password-seeded shuffle** — пул перемешивается перестановкой, сидированной от `SHA-256(password)`. Без пароля координаты невосстановимы.
+1. **Edge detection** — the Sobel operator on the grayscale projection; smooth regions are discarded (that is where LSB noise is visible to the eye).
+2. **Pool pruning** — candidates are filtered down to pixels with a high gradient.
+3. **Password-seeded shuffle** — the pool is shuffled with a permutation seeded from `SHA-256(password)`. Without the password the coordinates cannot be recovered.
 
-Результат: payload разбросан по «шумным» зонам контейнера в детерминированном, но криптографически непредсказуемом порядке.
+The payload ends up scattered across the "noisy" zones of the carrier, in an order that is deterministic but cryptographically unpredictable.
 
 ### DCT Spreading (JPEG)
 
-Для JPEG пространственные пиксели бесполезны — повторное сжатие уничтожит изменения. **DctProcessor** работает с **квантованными DCT-коэффициентами** напрямую (без re-encode):
+For JPEG, spatial pixels are useless: recompression would destroy the changes. **DctProcessor** works on the **quantized DCT coefficients** directly (no re-encode):
 
-1. Через `jpegio` извлекаются `coef_arrays[0]` — Y-канал блоков 8×8.
-2. В каждом блоке отбираются **среднечастотные AC** (zigzag 1..27): DC не трогаем (вызовет «шахматные» артефакты), высокие частоты — почти всегда нули, их модификация сломает Хаффман-сжатие.
-3. Из пула исключаются значения `{-2, -1, 0, 1}` — их LSB-модификация либо меняет знак (сломает декодер), либо обнуляет коэффициент (сломает пул при extract).
-4. Перестановка — та же `password-seeded shuffle`.
+1. `jpegio` extracts `coef_arrays[0]`, the Y channel of the 8×8 blocks.
+2. Each block contributes **mid-frequency AC** coefficients (zigzag 1..27). DC is left untouched (changing it causes "checkerboard" artifacts). High frequencies are almost always zero, and modifying them would break Huffman compression.
+3. The values `{-2, -1, 0, 1}` are excluded from the pool. An LSB change there either flips the sign (which breaks the decoder) or zeroes the coefficient (which breaks the pool on extraction).
+4. The permutation is the same `password-seeded shuffle`.
 
-Получаем JSteg-подобный пайплайн с расширенным фильтром, устойчивый к re-save в большинстве просмотрщиков.
+The result is a JSteg-like pipeline with an extended filter, robust to re-save in most viewers.
 
-### Производительность
+### Performance
 
-- **NumPy-векторизация:** все битовые операции (`unpackbits` / `packbits` / маски `& ~1 | bit`) выполняются над целыми массивами без Python-циклов.
-- **Async UI:** все тяжёлые операции уходят в `StegoWorker(QThread)` — GUI не подмерзает даже на 68 МБ WAV.
-- **Опциональный SSIM:** psychovisual-метрика отключаема в настройках (на 2 МБ PNG экономит ~1.5 с).
+- **NumPy vectorization:** every bitwise operation (`unpackbits` / `packbits` / masks `& ~1 | bit`) runs on whole arrays, with no Python loops.
+- **Async UI:** heavy work goes to `StegoWorker(QThread)`, so the GUI stays responsive even on a 68 MB WAV.
+- **Optional SSIM:** the psychovisual metric can be turned off in settings (saves ~1.5 s on a 2 MB PNG).
 
-Подробные UML/C4-диаграммы и Architectural Decision Records (ADR) доступны в папке `docs/`.
+Detailed UML/C4 diagrams and Architectural Decision Records (ADR) are in the `docs/` folder.
 
 
 ---
 
-## ⚙️ Сборка и установка (Build & Run)
+## ⚙️ Build and installation (Build & Run)
 
-### Требования
+### Requirements
 
 - **Python 3.12+**
 - **OS:** Windows 10/11, macOS 12+, Linux (Ubuntu 22.04+)
-- ~500 МБ свободного места на диске (с учётом venv + зависимостей)
+- ~500 MB of free disk space (including the venv and dependencies)
 
-### Вариант 1 — Использовать готовый .exe (для пользователей Windows)
+### Option 1 — Use a prebuilt .exe (for Windows users)
 
-Скачайте последний релиз из раздела **Releases** репозитория. Архив содержит:
+Download the latest release from the repository **Releases** section. The archive contains:
 
 ```text
 SteGambit/
-├── SteGambit.exe  ← запускаемый файл
-├── _internal/     ← runtime-зависимости
+├── SteGambit.exe  ← executable
+├── _internal/     ← runtime dependencies
 └── README.txt
 ```
 
-Просто запустите `SteGambit.exe` — установка не требуется. Все настройки хранятся в памяти приложения (не пишутся в реестр Windows).
+Launch `SteGambit.exe` — installation is not required. Settings stay in application memory (they are not written to the Windows registry).
 
-### Вариант 2 — Запуск из исходников (для разработчиков)
+### Option 2 — Run from source (for developers)
 
 ```bash
-# 1. Клонировать репозиторий
+# 1. Clone the repository
 git clone https://git.cs.hse.ru/dddaragan/SteGambit.git
 cd SteGambit
 
-# 2. Создать виртуальное окружение
+# 2. Create a virtual environment
 python -m venv .venv
 .\.venv\Scripts\activate         # Windows
 source .venv/bin/activate        # macOS/Linux
 
-# 3. Установить зависимости
-pip install -e .                 # из pyproject.toml
-# или
-pip install -r requirements.txt  # из requirements
+# 3. Install dependencies
+pip install -e .                 # from pyproject.toml
+# or
+pip install -r requirements.txt  # from requirements
 
-# 4. Запустить приложение
+# 4. Run the application
 python -m stegambit
 ```
 
-### Вариант 3 — Сборка .exe из исходников (PyInstaller)
+### Option 3 — Build an .exe from source (PyInstaller)
 
 ```bash
-# Установить PyInstaller
+# Install PyInstaller
 pip install pyinstaller
 
-# Собрать (onedir-режим, рекомендуется — стартует быстрее)
+# Build (onedir mode, recommended — starts faster)
 pyinstaller build.spec
 
-# Результат:
+# Output:
 # dist/SteGambit/SteGambit.exe
 ```
 
-Конфигурация PyInstaller лежит в `build.spec`. Параметры:
+The PyInstaller configuration is in `build.spec`. Parameters:
 
-- **onedir** — приложение + рантайм в отдельной папке (быстрый старт, ~100 МБ).
-- **windowed** — без чёрной консоли при запуске GUI.
-- **hidden imports** — явно прописаны `jpegio`, `PIL._tkinter_finder` (PyInstaller не всегда их находит автоматически).
+- **onedir** — the application and its runtime in a separate folder (fast startup, ~100 MB).
+- **windowed** — no black console when the GUI starts.
+- **hidden imports** — `jpegio` and `PIL._tkinter_finder` are listed explicitly (PyInstaller does not always find them on its own).
 
-### Запуск тестов
+### Running tests
 
 ```bash
-# Юнит + интеграционные (быстро, ~30 секунд):
+# Unit + integration (fast, ~30 seconds):
 pytest tests/
 
-# E2E test smoke (быстро):
+# E2E smoke test (fast):
 pytest tests/e2e/
 
-# E2E load (тяжёлые сценарии, ~3-6 минут):
+# E2E load (heavy scenarios, ~3-6 minutes):
 pytest tests/e2e/test_e2e_load.py -m load -v -s
 ```
 
-### Документация API
+### API documentation
 
 ```bash
-# Установить mkdocs (один раз)
+# Install mkdocs (once)
 pip install mkdocs mkdocstrings[python]
 
-# Запустить локальный сервер
+# Start the local server
 mkdocs serve
-# → откроет http://127.0.0.1:8000 с автосгенерированной API-документацией
+# → opens http://127.0.0.1:8000 with auto-generated API documentation
 ```
 
 ---
 
-## ❓ FAQ и Ограничения (Troubleshooting)
+## ❓ FAQ and limitations (Troubleshooting)
 
-**В: Выдает ошибку "Недостаточно ёмкости / TOO LARGE", хотя оригинальный файл весит 5 МБ, а payload — 1 МБ.**
-О: Размер файла (в байтах) не равен его стеганографической ёмкости. Если это `JPEG`, ёмкость ограничена количеством ненулевых валидных DCT-коэффициентов. Если это `PNG`, ёмкость ограничена политикой *Content-Aware* (система отказывается портить гладкие участки неба/стен, чтобы не вызывать визуальных артефактов). Берите картинку с большим количеством деталей (шумную) или увеличьте разрешение.
+**Q: The error "Insufficient capacity / TOO LARGE" appears, even though the original file is 5 MB and the payload is 1 MB.**
+A: File size in bytes is not the same as steganographic capacity. For `JPEG`, capacity is limited by the number of non-zero valid DCT coefficients. For `PNG`, capacity is limited by the *Content-Aware* policy (the system will not damage smooth regions such as sky or walls, because that would create visual artifacts). Use a detailed (noisy) picture, or increase the resolution.
 
-**В: Ошибка "MAGIC bytes не найдены" при извлечении.**
-О: Это означает одно из двух: (1) Неверный пароль (координаты сгенерировались неверно, и система прочитала "мусор"), либо (2) Данный файл чист и не содержит спрятанных данных.
+**Q: Extraction fails with "MAGIC bytes not found".**
+A: One of two things is true: (1) the password is wrong (the coordinates were generated incorrectly and the system read "garbage"), or (2) the file is clean and contains no hidden data.
 
-**В: Почему я не могу спрятать данные в `PNG` и сохранить результат как `JPEG`?**
-О: Включена математическая *политика анти-конверсии*. При сохранении LSB-модифицированного изображения в формат с потерями (JPEG), пространственная матрица будет пережата, и младшие биты будут уничтожены сжатием Хаффмана/квантованием. Система блокирует такие действия на уровне интерфейса.
+**Q: Why can't I hide data in a `PNG` and save the result as `JPEG`?**
+A: A mathematical *anti-conversion policy* is enabled. Saving an LSB-modified image to a lossy format (JPEG) recompresses the spatial matrix, and Huffman coding plus quantization destroy the least significant bits. The interface blocks that action.
 
 ---
 *Created as an Academic Project.

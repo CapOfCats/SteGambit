@@ -1,33 +1,33 @@
-# План тестирования системы SteGambit
+# SteGambit System Test Plan
 
-## 1. Введение
-Данный документ описывает стратегию, уровни и критерии приемки для процесса тестирования кросс-платформенного стеганографического инструмента SteGambit.
+## 1. Introduction
+This document describes the strategy, test levels, and acceptance criteria for testing the cross-platform steganography tool SteGambit.
 
-## 2. Уровни тестирования. Что будет взято из пирамиды тестирования
-Стратегия тестирования базируется на трехслойной пирамиде:
+## 2. Test levels. What is taken from the testing pyramid
+The testing strategy is based on a three-layer pyramid:
 
-1. **Unit-тесты (White Box):** Изолированное тестирование атомарных математических и криптографических функций.
-2. **Integration-тесты (White Box):** Тестирование взаимодействия слоев Core && Service, полные сквозные прогоны Encode -> Decode на реальных медиафайлах.
-3. **Smoke/Приемочные тесты (Black Box):** Ручное тестирование Пользовательского Интерфейса на основе критических сценариев.
+1. **Unit tests (White Box):** Isolated testing of atomic mathematical and cryptographic functions.
+2. **Integration tests (White Box):** Testing interaction between the Core and Service layers, and full end-to-end Encode -> Decode runs on real media files.
+3. **Smoke/Acceptance tests (Black Box):** Manual user-interface testing based on critical scenarios.
 
-## 3. Область тестирования
-Тестирование разделено на 9 независимых доменных областей, покрывающих весь жизненный цикл системы:
-1. **Криптография (Core/Crypto):** AES-GCM, KDF, компрессия.
-2. **Идентификация форматов:** проверка Magic Bytes, защита RIFF.
-3. **Пространственный домен (LSB):** векторизованные операции над ndarray.
-4. **Частотный домен (DCT):** JSteg-фильтрация (исключение мертвой зоны `{-2, -1, 0, 1}`).
-5. **Дисперсия (Spreader):** детерминизм PRNG, инвариантность LSB к пулу.
-6. **Операции ввода-вывода (I/O):** сохранение структур (в т.ч. таблиц Хаффмана для JPEG).
-7. **Сервисный фасад (StegoService):** оркестрация, защита анти-конверсии.
-8. **Метрики качества:** PSNR, SSIM, Deviation %.
-9. **Контракты данных (DTO):** неизменяемость моделей.
+## 3. Test scope
+Testing is split into 9 independent domain areas that cover the full system lifecycle:
+1. **Cryptography (Core/Crypto):** AES-GCM, KDF, compression.
+2. **Format identification:** Magic Bytes checks, RIFF protection.
+3. **Spatial domain (LSB):** vectorized operations on ndarray.
+4. **Frequency domain (DCT):** JSteg filtering (exclusion of the dead zone `{-2, -1, 0, 1}`).
+5. **Spreading (Spreader):** PRNG determinism, LSB invariance with respect to the pool.
+6. **Input/output operations (I/O):** preservation of structures (including Huffman tables for JPEG).
+7. **Service facade (StegoService):** orchestration, anti-conversion protection.
+8. **Quality metrics:** PSNR, SSIM, Deviation %.
+9. **Data contracts (DTO):** model immutability.
 
-## 4. Исключения
-*   E2E-автоматизация GUI (через `pytest-qt`). Оправдано ручным тестированием.
-*   Нагрузочное тестирование контейнеров > 100 МБ.
-*   Стегоанализ (выполнялся на этапе проектирования алгоритмов).
+## 4. Exclusions
+*   E2E GUI automation (via `pytest-qt`). Justified by manual testing.
+*   Load testing of containers larger than 100 MB.
+*   Steganalysis (performed during algorithm design).
 
-## 5. Инструментарий и метрики
-*   **Фреймворк:** `pytest`, `pytest-cov`, `pytest-html`.
-*   **Целевое покрытие:** Не менее 70% для пакетов `core/` и `services/`. Код `gui/` исключен из метрик покрытия.
-*   **Генерация отчетов:** `pytest --html=docs/testing/report.html --cov=src`
+## 5. Tooling and metrics
+*   **Framework:** `pytest`, `pytest-cov`, `pytest-html`.
+*   **Target coverage:** At least 70% for the `core/` and `services/` packages. `gui/` code is excluded from coverage metrics.
+*   **Report generation:** `pytest --html=docs/testing/report.html --cov=src`

@@ -1,8 +1,8 @@
-"""Сценарии паролей: пустой, юникод, длинный, неверный, не-определимость шифра.
+"""Password scenarios: empty, unicode, long, wrong, ciphertext non-determinism.
 
-Покрывает crypto-слой через публичный API сервиса. Гарантирует, что
-seed-схема (SHA-256 от пароля) работает на любых строках, а GCM ловит
-несовпадение пароля при extract.
+Covers the crypto layer through the public service API. Guarantees that
+the seed scheme (SHA-256 of the password) works on any string, and that GCM catches
+a password mismatch on extract.
 """
 import pytest
 
@@ -15,7 +15,7 @@ pytestmark = [pytest.mark.integration]
 
 
 def _hide_and_extract(carrier, payload, tmp_path, *, encode_pwd, decode_pwd):
-    """Хелпер: encode с одним паролем, decode с другим. Возвращает response."""
+    """Helper: encode with one password, decode with another. Returns the response."""
     service = StegoService()
     stego_path = tmp_path / "stego.png"
     extract_out = tmp_path / "extracted"
@@ -37,16 +37,16 @@ def _hide_and_extract(carrier, payload, tmp_path, *, encode_pwd, decode_pwd):
 @pytest.mark.parametrize(
     "password",
     [
-        "",                              # пустой - регресс на свежий GUI-баг
-        "x",                             # 1 символ
-        "simple_password_123",           # обычный ASCII
-        "пароль_с_кириллицей",           # юникод-кириллица
-        "♂♀♪",                       # эмодзи
-        "пароль🔐mixed_123",             # смешанная строка
-        "a" * 500,                       # очень длинный
-        "!@#$%^&*()_+-={}[]|\\:;\"'<>?,./",  # спец-символы
-        "   ",                           # только пробелы
-        "\n\t\r",                        # whitespace-непечатные
+        "",                              # empty — regression for a recent GUI bug
+        "x",                             # 1 character
+        "simple_password_123",           # plain ASCII
+        "пароль_с_кириллицей",           # unicode Cyrillic
+        "♂♀♪",                       # emoji
+        "пароль🔐mixed_123",             # mixed string
+        "a" * 500,                       # very long
+        "!@#$%^&*()_+-={}[]|\\:;\"'<>?,./",  # special characters
+        "   ",                           # spaces only
+        "\n\t\r",                        # non-printable whitespace
     ],
     ids=[
         "empty", "single_char", "simple_ascii",
@@ -56,7 +56,7 @@ def _hide_and_extract(carrier, payload, tmp_path, *, encode_pwd, decode_pwd):
     ],
 )
 def test_password_roundtrip_succeeds(password, png_small, payload_tiny, tmp_path):
-    """Любой валидный str-пароль даёт корректный round-trip, если encode == decode."""
+    """Any valid str password gives a correct round-trip when encode == decode."""
     resp = _hide_and_extract(
         png_small, payload_tiny, tmp_path,
         encode_pwd=password, decode_pwd=password,
@@ -73,7 +73,7 @@ def test_password_roundtrip_succeeds(password, png_small, payload_tiny, tmp_path
         ("non_empty", ""),
         ("password1", "password2"),
         ("Password", "password"),       # case-sensitivity
-        ("пароль", "пapoль"),           # визуально похожие символы (латинские vs кириллица)
+        ("пароль", "пapoль"),           # look-alike characters (Latin vs Cyrillic)
     ],
     ids=[
         "wrong_password", "empty_vs_nonempty", "nonempty_vs_empty",
@@ -83,10 +83,10 @@ def test_password_roundtrip_succeeds(password, png_small, payload_tiny, tmp_path
 def test_wrong_password_raises_invalid_frame(
     encode_pwd, decode_pwd, png_small, payload_tiny, tmp_path,
 ):
-    """Несовпадение пароля -> InvalidFrameError.
+    """A password mismatch -> InvalidFrameError.
 
-    Это первая линия защиты: пул координат разный -> читаются мусорные
-    биты -> MAGIC bytes не найдены до того, как GCM-MAC даже проверится.
+    This is the first line of defense: a different coordinate pool -> garbage
+    bits are read -> MAGIC bytes are not found before the GCM MAC is even checked.
     """
     with pytest.raises(InvalidFrameError):
         _hide_and_extract(
@@ -96,10 +96,10 @@ def test_wrong_password_raises_invalid_frame(
 
 
 def test_non_determinism_of_ciphertext(png_medium, payload_tiny, tmp_path):
-    """Один и тот же payload + пароль -> РАЗНЫЕ stego-файлы (рандомный nonce).
+    """The same payload + password -> DIFFERENT stego files (random nonce).
 
-    Гарантия криптостойкости: повторный encode не создаёт идентичный
-    стего-контейнер, даже при идентичных входах. Это защищает от detect-by-comparison атак.
+    A cryptographic guarantee: a repeated encode does not create an identical
+    stego container, even with identical inputs. This protects against detect-by-comparison attacks.
     """
     service = StegoService()
 
@@ -122,7 +122,7 @@ def test_non_determinism_of_ciphertext(png_medium, payload_tiny, tmp_path):
         "Это критическая уязвимость."
     )
 
-    # Оба должны декодиться в тот же payload.
+    # Both must decode to the same payload.
     extract1 = tmp_path / "extract1"
     extract2 = tmp_path / "extract2"
 
@@ -141,10 +141,10 @@ def test_non_determinism_of_ciphertext(png_medium, payload_tiny, tmp_path):
 
 
 def test_empty_password_encode_empty_decode(png_small, payload_tiny, tmp_path):
-    """Регресс на GUI-баг: encode с "" -> decode с "" должны быть консистентны.
+    """Regression for a GUI bug: encode with "" -> decode with "" must be consistent.
 
-    Дублирует один кейс из параметризации, но вынесен отдельным
-    тестом для явной читаемости в отчётах CI.
+    Duplicates one case from the parametrization, but is split out as its own
+    test so it is easy to read in CI reports.
     """
     resp = _hide_and_extract(
         png_small, payload_tiny, tmp_path,

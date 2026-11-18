@@ -1,71 +1,71 @@
-# ADR 001: Базовые архитектурные паттерны и структура директорий ядра
+# ADR 001: Core Architectural Patterns and Directory Structure
 
-**Дата:** 2026-03-22
-**Статус:** Утверждено
-**Контекст:** Разработка мультиформатного инструмента стеганографии SteGambit.
+**Date:** 2026-03-22
+**Status:** Approved
+**Context:** Development of the multi-format steganography tool SteGambit.
 
-## 1. Проблематика
-Проекту выставлены жесткие метрики: PSNR $\ge 40$ dB, прирост объема $\le 30\%$, а также строгие тайминги производительности ($\le 1$ сек/2МБ) с учетом криптографических преобразований (AES-GCM). У нас всего месяц на MVP. 
-Если мы смешаем логику отрисовки прогресс-баров в PyQt6 с матричными вычислениями `numpy` и криптографией, проект превратится в нетестируемый монолит. Нам требуются четкие контракты межслойного взаимодействия и строгая инкапсуляция математики.
+## 1. Problem
+The project has hard metrics: PSNR $\ge 40$ dB, size growth $\le 30\%$, and strict performance timings ($\le 1$ sec/2MB) including cryptographic transforms (AES-GCM). There is one month for the MVP.
+If PyQt6 progress-bar rendering is mixed with `numpy` matrix computation and cryptography, the project becomes an untestable monolith. Clear cross-layer contracts and strict encapsulation of the mathematics are required.
 
-## 2. Утвержденные паттерны взаимодействия 
+## 2. Approved Interaction Patterns
 
-Для обеспечения принципа независимости слоев (Defense-in-Depth) в рамках MVC и Service Layer, фиксируем следующие паттерны:
+To keep layers independent (Defense-in-Depth) within MVC and the Service Layer, the following patterns are fixed:
 
-### 2.1 Facade (Уровень Service Layer)
-*   **Имплементация:** `StegoController` (в `src/services/`).
-*   **Обоснование:** Слой GUI (PyQt6) не должен знать ничего о `numpy`, байтовых сдвигах, генерации векторов для AES и прочем аде. Фронтенд должен только ловить события нажатия кнопок и передавать фасаду примитивы (пути, строки паролей). Фасад сам оркестрирует потоки `AsyncWorker`, дергает крипту, передает массив в ядро и отдает графике готовый DTO с метриками. 
+### 2.1 Facade (Service Layer)
+*   **Implementation:** `StegoController` (in `src/services/`).
+*   **Rationale:** The GUI layer (PyQt6) must know nothing about `numpy`, byte shifts, AES vector generation, and the rest of the low-level details. The frontend only handles button-click events and passes primitives (paths, password strings) to the facade. The facade orchestrates `AsyncWorker` threads, calls crypto, passes the array into the core, and returns a ready DTO with metrics to the UI.
 
-### 2.2 Strategy (Уровень Core Steganography)
-*   **Имплементация:** Единый интерфейс `IStegoProcessor` с конкретными реализациями (`LsbProcessor`, `DctProcessor`).
-*   **Обоснование:** Не плодим спагетти-код из `if/else` блоков. Внедрение в пространственный домен (.png) кардинально отличается от работы с частотным доменом (.wav). Каждый алгоритм инкапсулирован в свою "стратегию" со своим набором мат. аппарата. Ядру плевать, что мы прячем, оно просто вызывает метод `embed()` у подсунутой стратегии.
+### 2.2 Strategy (Core Steganography)
+*   **Implementation:** A single `IStegoProcessor` interface with concrete implementations (`LsbProcessor`, `DctProcessor`).
+*   **Rationale:** No spaghetti of `if/else` blocks. Embedding in the spatial domain (.png) is fundamentally different from work in the frequency domain (.wav). Each algorithm is encapsulated in its own "strategy" with its own mathematical apparatus. The core does not care what is being hidden; it simply calls `embed()` on the supplied strategy.
 
-### 2.3 Factory Method + Анализ Magic Bytes
-*   **Имплементация:** `ProcessorFactory` в связке с утилитой `FormatIdentifier`.
-*   **Обоснование:** Верить расширению файла (например, юзер переименовал `malware.exe` в `cat.png`) — это дыра в безопасности и выстрел себе в ногу. Фабрика берет первые байты (Magic Numbers) входного файла, достоверно определяет его реальный формат, и только на основе этого инстанцирует нужную стратегию из п. 2.2. Защита от дурака на уровне архитектуры.
+### 2.3 Factory Method + Magic Bytes Analysis
+*   **Implementation:** `ProcessorFactory` together with the `FormatIdentifier` utility.
+*   **Rationale:** Trusting the file extension (for example, a user renamed `malware.exe` to `cat.png`) is a security hole. The factory reads the first bytes (magic numbers) of the input file, reliably determines the real format, and only then instantiates the required strategy from section 2.2. Defensive validation at the architecture level.
 
-### 2.4 Cross-Cutting Concerns (Сквозной функционал)
-*   **Имплементация:** Модуль `infrastructure/logger.py`
-*   **Обоснование:** Логирование требуется каждому слою приложения для контроля метрик, таймингов и отладки (согласно ТЗ). Чтобы не создавать циклических зависимостей, логгер выносится в изолированный инфраструктурный модуль
-*   **ИБ-требования:** Внедрение строгого фильтра, запрещающего попадание криптографических ключей, паролей и исходных битовых последовательностей полезной нагрузки в выходные файлы логов. Нарушение этого правила считается фатальным отказом.
+### 2.4 Cross-Cutting Concerns
+*   **Implementation:** Module `infrastructure/logger.py`
+*   **Rationale:** Every application layer needs logging to control metrics, timings, and debugging (per the requirements). To avoid cyclic dependencies, the logger lives in an isolated infrastructure module
+*   **Security requirements:** A strict filter forbids cryptographic keys, passwords, and the original payload bit sequences from appearing in log output files. Violating this rule is a fatal failure.
 
-## 3. Фиксация структуры директорий (Component Level)
+## 3. Directory Structure (Component Level)
 
-Принимаем layout `src/`, чтобы избежать проблем с импортами и изолировать исходники от конфигурации окружения.
+The `src/` layout is adopted to avoid import problems and to isolate sources from environment configuration.
 
 ```text
 stegambit_project/
-├── .venv/                      # Изолированная среда (dev only)
-├── data/                       # Тестовые полигоны (игнорится в .gitignore)
-├── tests/                      # Инфраструктура QA (unit и e2e тесты)
-├── docs/                       # C4 диаграммы, ADR и ТЗ
-├── main.py                     # Точка входа в приложение (bootstrapping)
-└── src/                        # Исходники
+├── .venv/                      # Isolated environment (dev only)
+├── data/                       # Test sandboxes (gitignored)
+├── tests/                      # QA infrastructure (unit and e2e tests)
+├── docs/                       # C4 diagrams, ADRs, and requirements
+├── main.py                     # Application entry point (bootstrapping)
+└── src/                        # Sources
     ├── __init__.py
-    ├── core/                   # [ЯДРО] Математика и крипта. Изолировано от всего.
+    ├── core/                   # [CORE] Mathematics and crypto. Isolated from everything.
     │   ├── stego/              
-    │   │   ├── factory.py      # Реализация Factory Method
+    │   │   ├── factory.py      # Factory Method implementation
     │   │   ├── strategies.py   # LsbProcessor, DctProcessor
-    │   │   └── spreader.py     # PRNG генератор путей
+    │   │   └── spreader.py     # PRNG path generator
     │   ├── crypto/             
     │   │   ├── engine.py       # AES-GCM
-    │   │   └── key_manager.py  # Деривация ключей (SHA-512)
+    │   │   └── key_manager.py  # Key derivation (SHA-512)
     │   └── common/             
-    │       └── format_id.py    # Анализатор Magic Bytes
+    │       └── format_id.py    # Magic-bytes analyzer
     │
-    ├── services/               # [ФАСАД] Координация
-    │   ├── stego_service.py    # Тот самый Facade для GUI
-    │   ├── async_worker.py     # Обертки для фоновых потоков
-    │   └── analytics/          # Модуль метрик (PSNR, емкость)
+    ├── services/               # [FACADE] Coordination
+    │   ├── stego_service.py    # The Facade for the GUI
+    │   ├── async_worker.py     # Wrappers for background threads
+    │   └── analytics/          # Metrics module (PSNR, capacity)
     │
-    ├── models/                 # [ПЕРЕДАЧА ДАННЫХ] DTO контракты
-    │   └── dto.py              # Исключительно @dataclass и Enum
+    ├── models/                 # [DATA TRANSFER] DTO contracts
+    │   └── dto.py              # Only @dataclass and Enum
     │
-    ├── gui/                    # [ФРОНТЕНД] PyQt6
+    ├── gui/                    # [FRONTEND] PyQt6
     │   ├── main_window.py      
     │   └── widgets/
     │
-    └── infrastructure/         # Блок для "сквозного" функционала
+    └── infrastructure/         # Block for cross-cutting functionality
         ├── __init__.py
-        ├── config.py           # Загрузка настроек
-        └── logger.py           # Логгер
+        ├── config.py           # Settings loading
+        └── logger.py           # Logger

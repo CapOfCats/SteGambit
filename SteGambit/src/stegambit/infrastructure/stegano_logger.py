@@ -1,7 +1,7 @@
-"""Настройка глобального логирования для SteGambit.
+"""Global logging setup for SteGambit.
 
-Используется ядром  и GUI для записи важных событий и ошибок. 
-Вывод дублируется в консоль и файл с ротацией 5 файлов по 1 МБ, чтобы лог не разрастался бесконечно.
+Used by the core and the GUI to record important events and errors.
+Output is duplicated to the console and a file rotated at 5 files of 1 MB so the log does not grow without bound.
 """
 import logging
 import logging.handlers
@@ -14,11 +14,11 @@ _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 _LOG_DATE_FORMAT = "%H:%M:%S"
 _DEFAULT_LOG_FILE = "stegambit.log"
 
-# Ротация: до 5 файлов по 1 МБ.
+# Rotation: up to 5 files of 1 MB.
 _LOG_MAX_BYTES = 1 * 1024 * 1024
 _LOG_BACKUP_COUNT = 5
 
-# Сохраняем путь к активному лог-файлу, чтобы GUI мог открыть его.
+# Keep the active log path so the GUI can open it.
 _active_log_path: Optional[Path] = None
 
 
@@ -26,32 +26,32 @@ def setup_logging(
     level: int = logging.INFO,
     log_file: str | Path = _DEFAULT_LOG_FILE,
 ) -> None:
-    """Инициализирует root-логгер: консоль + ротируемый файл.
+    """Initializes the root logger: console + rotating file.
 
-    Вызывается один раз на старте приложения.
-    Идемпотентна: повторный вызов не дублирует хендлеры.
+    Called once at application startup.
+    Idempotent: a repeated call does not duplicate handlers.
 
     Args:
-        level: Минимальный уровень логирования.
-        log_file: Путь к файлу логов. Резолвится к абсолютному пути.
+        level: Minimum logging level.
+        log_file: Path to the log file. Resolved to an absolute path.
     """
     global _active_log_path
 
     root = logging.getLogger()
 
-    # Защита от двойной инициализации (актуально при перезапусках в IDE).
+    # Guard against double initialization (relevant on IDE restarts).
     if getattr(root, "_stegambit_configured", False):
         return
 
     root.setLevel(level)
     formatter = logging.Formatter(_LOG_FORMAT, datefmt=_LOG_DATE_FORMAT)
 
-    # Консольный хендлер.
+    # Console handler.
     console = logging.StreamHandler(sys.stdout)
     console.setFormatter(formatter)
     root.addHandler(console)
 
-    # Файловый хендлер с ротацией.
+    # Rotating file handler.
     log_path = Path(log_file).resolve()
     file_handler = logging.handlers.RotatingFileHandler(
         log_path,
@@ -69,14 +69,14 @@ def setup_logging(
 
 
 def get_log_path() -> Optional[Path]:
-    """Возвращает абсолютный путь к активному лог-файлу.
+    """Returns the absolute path to the active log file.
 
     Returns:
-        Path к файлу логов после setup_logging(), либо None, если setup_logging ещё не был вызван.
+        Path to the log file after setup_logging(), or None if setup_logging has not been called yet.
     """
     return _active_log_path
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Получить именованный логгер. Просто обёртка для единообразия импортов."""
+    """Return a named logger. A thin wrapper for consistent imports."""
     return logging.getLogger(name)

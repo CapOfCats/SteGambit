@@ -11,7 +11,7 @@ from .key_manager import KeyManager
 
 
 class FrameLayout:
-    """Структура 57-байтного фрейма."""
+    """Layout of the 57-byte frame."""
     MAGIC = b"SGB1"
     MAGIC_LEN = 4
     FLAGS_LEN = 1
@@ -22,20 +22,20 @@ class FrameLayout:
     HEADER_LEN = MAGIC_LEN + FLAGS_LEN + SALT_LEN + NONCE_LEN + LENGTH_LEN + MAC_LEN
 
 class Flags(IntFlag):
-    """Битовые маски поля FLAGS."""
+    """Bit masks of the FLAGS field."""
     COMPRESSED = 0x01
     IS_DECOY = 0x02
 
 class HeuristicCompression:
-    """Эвристика включения сжатия."""
-    COMPRESSION_MIN_SIZE = 256        # меньше — сжимать нет смысла
-    COMPRESSION_RATIO_THRESHOLD = 0.9  # сжимаем, только если выигрыш > 10%
+    """Heuristic for enabling compression."""
+    COMPRESSION_MIN_SIZE = 256        # below this, compressing is pointless
+    COMPRESSION_RATIO_THRESHOLD = 0.9  # compress only if the gain is > 10%
     COMPRESSION_LEVEL = 9
 
 
 @dataclass(frozen=True)
 class _ParsedFrame:
-    """Распарсенный 57-байтный заголовок + ciphertext."""
+    """Parsed 57-byte header plus ciphertext."""
     flags: int
     salt: bytes
     nonce: bytes
@@ -45,17 +45,17 @@ class _ParsedFrame:
 
 
 class CryptoEngine:
-    """AES-256-GCM шифрование с упаковкой в 57-байтный фрейм по ADR 006.
+    """AES-256-GCM encryption packed into a 57-byte frame per ADR 006.
 
-    Все методы статические и stateless — безопасно звать из любого потока.
+    All methods are static and stateless — safe to call from any thread.
     """
 
     @staticmethod
     def _should_compress(data: bytes) -> tuple[bytes, bool]:
-        """Сжимает data через zlib, если это даёт выигрыш > 10%.
+        """Compresses data with zlib when that yields a gain greater than 10%.
 
         Returns:
-            (сжатые данные, был_ли_применён_zlib).
+            (compressed data, whether_zlib_was_applied).
         """
         if len(data) < HeuristicCompression.COMPRESSION_MIN_SIZE:
             return data, False
@@ -66,29 +66,29 @@ class CryptoEngine:
 
     @staticmethod
     def encrypt(data: bytes, password: str, /, *, flags: int = 0) -> bytes:
-        """Шифрует data и упаковывает в crypto-frame по ADR 006.
+        """Encrypts data and packs it into a crypto-frame per ADR 006.
 
         Pipeline:
-            1. Опциональное zlib-сжатие (по эвристике _should_compress).
-            2. Генерация случайных SALT (16 байт) и NONCE (12 байт).
-            3. PBKDF2(password, salt) -> AES-ключ.
-            4. AES-GCM(nonce, key) -> ciphertext + 16-байтный MAC.
-            5. Сборка фрейма: MAGIC | FLAGS | SALT | NONCE | LENGTH | MAC | DATA.
+            1. Optional zlib compression (per the _should_compress heuristic).
+            2. Generation of a random SALT (16 bytes) and NONCE (12 bytes).
+            3. PBKDF2(password, salt) -> AES key.
+            4. AES-GCM(nonce, key) -> ciphertext + 16-byte MAC.
+            5. Frame assembly: MAGIC | FLAGS | SALT | NONCE | LENGTH | MAC | DATA.
 
         Args:
-            data:     Исходные байты payload.
-            password: Пароль пользователя (любая строка, включая пустую).
-            flags:    Дополнительные биты FLAGS (например, IS_DECOY).
-                      Бит COMPRESSED выставляется автоматически — управлять
-                      им снаружи нельзя.
+            data:     Original payload bytes.
+            password: User password (any string, including the empty one).
+            flags:    Extra FLAGS bits (for example, IS_DECOY).
+                      The COMPRESSED bit is set automatically — it cannot be
+                      controlled from the outside.
 
         Returns:
-            Бинарный блоб: HEADER_LEN (57 байт) + ciphertext.
-            Размер ciphertext равен len(data) после возможного zlib-сжатия.
+            Binary blob: HEADER_LEN (57 bytes) + ciphertext.
+            The ciphertext size equals len(data) after possible zlib compression.
 
         Note:
-            Каждый вызов генерирует новый SALT и NONCE — два вызова encrypt
-            с одинаковыми (data, password) дают РАЗНЫЕ outputs. Это by design.
+            Each call generates a new SALT and NONCE — two encrypt calls
+            with the same (data, password) produce DIFFERENT outputs. This is by design.
         """
         processed, compressed = CryptoEngine._should_compress(data)
         if compressed:
@@ -100,71 +100,71 @@ class CryptoEngine:
 
         aesgcm = AESGCM(key)
         ct_with_tag = aesgcm.encrypt(nonce, processed, associated_data=None)
-        ciphertext, mac = ct_with_tag[:-FrameLayout.MAC_LEN], ct_with_tag[-FrameLayout.MAC_LEN:] # всегда равен 16 байтам в конце
+        ciphertext, mac = ct_with_tag[:-FrameLayout.MAC_LEN], ct_with_tag[-FrameLayout.MAC_LEN:] # always the last 16 bytes
 
         length = len(processed)
         header = (
             FrameLayout.MAGIC
-            + struct.pack("B", flags & 0xFF) # тут упаковка одного байта + страховка на случай, если случайно будет выход за значение 255
+            + struct.pack("B", flags & 0xFF) # pack one byte, plus a guard in case the value accidentally exceeds 255
             + salt
             + nonce
-            + struct.pack(">Q", length) # Упаковка в 8-байтовый беззнаковый тип. Задел под кроссплатформенность
+            + struct.pack(">Q", length) # Pack into an 8-byte unsigned type. A provision for cross-platform use
             + mac
         )
         return header + ciphertext
 
     @staticmethod
     def _parse_frame(frame: bytes) -> _ParsedFrame:
-        """Разбор 57-байтного заголовка + ciphertext. Валидирует MAGIC и размеры."""
+        """Parses the 57-byte header plus ciphertext. Validates MAGIC and the sizes."""
         if len(frame) < FrameLayout.HEADER_LEN:
             raise InvalidFrameError(
                 f"Frame too short: {len(frame)} < {FrameLayout.HEADER_LEN}"
             )
-        if frame[:FrameLayout.MAGIC_LEN] != FrameLayout.MAGIC: # флаг меджика. Побайтовое чтение первых 4 - юзер пытается декодировать файл без стеганографии, если триггерится
+        if frame[:FrameLayout.MAGIC_LEN] != FrameLayout.MAGIC: # magic flag. Byte-wise read of the first 4 — if this triggers, the user is trying to decode a file with no steganography
             raise InvalidFrameError("Invalid MAGIC - wrong password or corrupted data")
 
         offset = FrameLayout.MAGIC_LEN
-        flags = frame[offset] # чтение байта на позиции (4)
-        offset += FrameLayout.FLAGS_LEN # append этого байта в отступ (5)
-        salt = frame[offset:offset + FrameLayout.SALT_LEN] # далее - 16 байт соли [5:21]
-        offset += FrameLayout.SALT_LEN # append в отступ (21)
-        nonce = frame[offset:offset + FrameLayout.NONCE_LEN] # nonce - 12 байт [21:33]
-        offset += FrameLayout.NONCE_LEN # прибавляется значение в отступ (33)
-        length = struct.unpack(">Q", frame[offset:offset + FrameLayout.LENGTH_LEN])[0] # распаковка 8 байт длины, конверт из кортежа
-        offset += FrameLayout.LENGTH_LEN # append длины к оффсету (41)
-        mac = frame[offset:offset + FrameLayout.MAC_LEN] # последние 16 байт заголовка
-        offset += FrameLayout.MAC_LEN # append последних 16 байт
+        flags = frame[offset] # read the byte at position (4)
+        offset += FrameLayout.FLAGS_LEN # append this byte to the offset (5)
+        salt = frame[offset:offset + FrameLayout.SALT_LEN] # next, 16 salt bytes [5:21]
+        offset += FrameLayout.SALT_LEN # append to the offset (21)
+        nonce = frame[offset:offset + FrameLayout.NONCE_LEN] # nonce — 12 bytes [21:33]
+        offset += FrameLayout.NONCE_LEN # the value is added to the offset (33)
+        length = struct.unpack(">Q", frame[offset:offset + FrameLayout.LENGTH_LEN])[0] # unpack 8 length bytes, converting out of the tuple
+        offset += FrameLayout.LENGTH_LEN # append the length to the offset (41)
+        mac = frame[offset:offset + FrameLayout.MAC_LEN] # last 16 bytes of the header
+        offset += FrameLayout.MAC_LEN # append the last 16 bytes
         ciphertext = frame[offset:offset + length]
 
         if len(ciphertext) != length:
             raise InvalidFrameError(
-                f"Ciphertext truncated: expected {length}, got {len(ciphertext)}" # проверка на "мусор"
+                f"Ciphertext truncated: expected {length}, got {len(ciphertext)}" # check for garbage
             )
         return _ParsedFrame(flags, salt, nonce, length, mac, ciphertext)
 
     @staticmethod
     def decrypt(frame: bytes, password: str) -> bytes:
-        """Расшифровывает crypto-frame и возвращает исходные байты payload.
+        """Decrypts a crypto-frame and returns the original payload bytes.
 
-        Pipeline (зеркало encrypt):
-            1. Парсинг фрейма (MAGIC валидация, FLAGS, SALT, NONCE, LENGTH, MAC).
-            2. PBKDF2(password, salt) -> AES-ключ.
-            3. AES-GCM.decrypt -> plaintext + проверка MAC.
-            4. Опциональная zlib-распаковка, если выставлен флаг COMPRESSED.
+        Pipeline (mirror of encrypt):
+            1. Frame parsing (MAGIC validation, FLAGS, SALT, NONCE, LENGTH, MAC).
+            2. PBKDF2(password, salt) -> AES key.
+            3. AES-GCM.decrypt -> plaintext plus a MAC check.
+            4. Optional zlib decompression if the COMPRESSED flag is set.
 
         Args:
-            frame:    Бинарный блоб ровно того формата, что вернул encrypt().
-            password: Пароль пользователя.
+            frame:    Binary blob in exactly the format returned by encrypt().
+            password: User password.
 
         Returns:
-            Исходные байты payload, идентичные тем, что были переданы в encrypt.
+            Original payload bytes, identical to those passed to encrypt.
 
         Raises:
-            InvalidFrameError:    Битый заголовок или неверный MAGIC
-                                  (файл не содержит данных SteGambit).
-            InvalidPasswordError: Неверный пароль ИЛИ данные были изменены
-                                  после embed (MAC mismatch). Различить эти
-                                  два случая криптографически невозможно.
+            InvalidFrameError:    Corrupt header or wrong MAGIC
+                                  (the file contains no SteGambit data).
+            InvalidPasswordError: Wrong password OR the data was altered
+                                  after embed (MAC mismatch). These two
+                                  cases cannot be distinguished cryptographically.
         """
         parsed = CryptoEngine._parse_frame(frame)
         key = KeyManager.derive_key(password, parsed.salt)
@@ -187,11 +187,11 @@ class CryptoEngine:
 
     @staticmethod
     def header_size() -> int:
-        """Возвращает размер crypto-frame БЕЗ payload в байтах.
+        """Returns the crypto-frame size WITHOUT the payload, in bytes.
 
-        Используется CapacityAnalyzer и StegoService для подсчёта реальной
-        ёмкости носителя (= общая ёмкость - служебные байты).
+        Used by CapacityAnalyzer and StegoService to compute the real
+        carrier capacity (= total capacity minus overhead bytes).
 
         Returns:
-            Фиксированный размер HEADER_LEN (57 байт по ADR 006)."""
+            Fixed HEADER_LEN size (57 bytes per ADR 006)."""
         return FrameLayout.HEADER_LEN

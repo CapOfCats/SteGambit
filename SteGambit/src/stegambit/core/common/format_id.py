@@ -1,9 +1,9 @@
-"""Идентификация файла по "магическим" байтам по ADR 007."""
+"""File identification by magic bytes per ADR 007."""
 from pathlib import Path
 
 _SIGNATURES: tuple[tuple[bytes, str], ...] = (
     (b"\x89PNG\r\n\x1a\n", "PNG"),
-    (b"RIFF", "WAV"),   # доп. проверка WAVE ниже
+    (b"RIFF", "WAV"),   # extra WAVE check below
     (b"\xff\xd8\xff", "JPEG"),
 )
 
@@ -14,32 +14,32 @@ _FORMAT_TO_EXT = {
 }
 
 def get_default_extension(fmt: str) -> str:
-    """Возвращает расширение по умолчанию для известного формата.
+    """Returns the default extension for a known format.
 
     Returns:
-        '.png' / '.jpg' / '.wav' для известных форматов, .bin для всего остального (текст или неподдерживаемый бинарь)
+        '.png' / '.jpg' / '.wav' for known formats, .bin for everything else (text or an unsupported binary)
     """
     return _FORMAT_TO_EXT.get(fmt, ".bin")
 
 class FormatIdentifier:
-    """Определяет реальный формат файла по Magic Bytes, игнорируя расширение."""
+    """Determines the real file format from magic bytes, ignoring the extension."""
 
-    _READ_BYTES = 12 # договоренность насчет длины nonce
+    _READ_BYTES = 12 # agreed nonce length
 
     def _validate_riff_subtype(self, header: bytes) -> bool:
-        """RIFF — контейнер-обёртка. Проверяем, что внутри WAVE, а не другой родственник типа AVI/WebP."""
+        """RIFF is a container wrapper. Check that WAVE is inside, not some other relative such as AVI/WebP."""
         return header[8:12] == b"WAVE"
     
     def _identify_from_header(self, header: bytes) -> str:
-        """Базовая логика определения формата по уже прочитанному буферу.
+        """Core format-detection logic for an already-read buffer.
 
-        Используется и identify, и identify_bytes (работает с готовыми байтами в памяти).
+        Used by both identify and identify_bytes (works on ready bytes in memory).
         """
         for magic, fmt in _SIGNATURES:
             if header.startswith(magic):
-                # Для RIFF нужна доп. проверка субтипа (WAVE vs AVI/WebP).
+                # RIFF needs an extra subtype check (WAVE vs AVI/WebP).
                 if fmt == "WAV" and not self._validate_riff_subtype(header):
-                    # Это RIFF, но НЕ WAVE -> пока не поддержан :((((.
+                    # This is RIFF, but NOT WAVE -> not supported yet :((((.
                     raise ValueError(
                         "RIFF контейнер не является WAVE (возможно AVI/WebP)."
                     )
@@ -47,11 +47,11 @@ class FormatIdentifier:
         raise ValueError("Unsupported or unknown format.")
 
     def identify(self, file_path: Path) -> str:
-        """Читает заголовок файла и возвращает 'PNG' | 'WAV' | 'JPEG'.
+        """Reads the file header and returns 'PNG' | 'WAV' | 'JPEG'.
 
         Raises:
-            ValueError: если формат не распознан или не поддерживается.
-            FileNotFoundError: если файл отсутствует.
+            ValueError: if the format is not recognized or is not supported.
+            FileNotFoundError: if the file is missing.
         """
         with open(file_path, "rb") as f:
             header = f.read(self._READ_BYTES)
@@ -62,19 +62,19 @@ class FormatIdentifier:
     
 
     def identify_bytes(self, data: bytes) -> str:
-        """Определяет формат по magic bytes готового буфера в памяти.
+        """Determines the format from the magic bytes of a ready in-memory buffer.
 
-        Используется после извлечения payload из стего-контейнера,
-        когда файл ещё не сохранён на диск.
+        Used after payload extraction from a stego container,
+        when the file has not yet been saved to disk.
 
         Returns:
             'PNG' | 'WAV' | 'JPEG'.
 
         Raises:
-            ValueError: если формат не распознан или это не WAV-RIFF.
+            ValueError: if the format is not recognized or this is not a WAV RIFF.
         """
         if len(data) < self._READ_BYTES:
-            # Маленький буфер — короткие данные, magic bytes могут не уместиться.
-            # Дополняем нулями, чтобы _identify_from_header не вылетел на срез.
+            # Small buffer — short data; the magic bytes may not fit.
+            # Pad with zeros so _identify_from_header does not fail on a slice.
             data = data + b"\x00" * (self._READ_BYTES - len(data))
         return self._identify_from_header(data[: self._READ_BYTES])

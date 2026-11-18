@@ -1,22 +1,22 @@
-"""E2E Load-тесты: нагрузочные сценарии на больших файлах.
+"""E2E load tests: stress scenarios on large files.
 
-Запускаются по флагу: -m load -v -s
+Run with the flag: -m load -v -s
 
-Артефакты:
-     large.png       (3.5 МБ, 2K×2K)  capacity 380 КБ payload
-     long.wav        (68 МБ, 16-bit/44.1)  capacity 850 КБ payload
-     large_photo.jpg (8 МБ)              capacity 387 КБ payload
+Artifacts:
+     large.png       (3.5 MB, 2K×2K)  capacity 380 KB payload
+     long.wav        (68 MB, 16-bit/44.1)  capacity 850 KB payload
+     large_photo.jpg (8 MB)              capacity 387 KB payload
 
-Capacity для PNG/WAV сильно меньше размера файла из-за фильтрации
-"шумных" пикселей/сэмплов в SmartSpreader (edge-detection для PNG,
-silence-cutoff для WAV). Для JPEG capacity определяется фильтром
-среднечастотных AC-коэффициентов.
+Capacity for PNG/WAV is much smaller than the file size because of filtering
+of "noisy" pixels/samples in SmartSpreader (edge detection for PNG,
+silence cutoff for WAV). For JPEG, capacity is set by the filter of
+mid-frequency AC coefficients.
 
-Ожидаемое время прогона: 3-6 минут.
+Expected runtime: 3-6 minutes.
 
-Архитектурное примечание:
-    PNG-носители > 3.5MB могут вызывать OOM на бытовых конфигурациях. SmartSpreader аллоцирует O(N) памяти
-    от размера контейнера; на 6K×6K это даёт 3-5 ГБ пиковой памяти.
+Architectural note:
+    PNG carriers > 3.5MB can cause OOM on consumer machines. SmartSpreader allocates O(N) memory
+    from the container size; on 6K×6K that is 3-5 GB of peak memory.
 """
 import time
 from pathlib import Path
@@ -30,21 +30,21 @@ from stegambit.core.exceptions import CompatibilityError
 from .conftest import assert_bytes_equal_to_file
 
 
-# Маркер для всех тестов в этом модуле.
+# Marker for every test in this module.
 pytestmark = pytest.mark.load
 
 
 class TestE2ELoadPNG:
-    """Нагрузочное тестирование PNG-LSB.
+    """Load testing of PNG-LSB.
 
-    Реалистичный потолок носителя ~3.5MB из-за O(N) памяти в SmartSpreader.
-    Capacity такого PNG ~380KB payload (10-15% от файла после edge-фильтра).
+    A realistic carrier ceiling is ~3.5MB because of O(N) memory in SmartSpreader.
+    Capacity of such a PNG is ~380KB of payload (10-15% of the file after the edge filter).
     """
 
     def test_png_load_250kb_payload(
         self, png_large: Path, payload_250kb: Path, tmp_path: Path
     ):
-        """PNG 3.5МБ + 250КБ payload (комфортный запас по capacity)."""
+        """PNG 3.5MB + 250KB payload (comfortable capacity margin)."""
         service = StegoService()
 
         t0 = time.perf_counter()
@@ -77,11 +77,11 @@ class TestE2ELoadPNG:
     def test_png_load_350kb_near_capacity(
         self, png_large: Path, payload_350kb: Path, tmp_path: Path
     ):
-        """PNG 3.5МБ + 350КБ payload (на границе capacity 380KB).
+        """PNG 3.5MB + 350KB payload (at the 380KB capacity boundary).
 
-        Best-effort: если capacity конкретного носителя оказалась чуть
-        меньше  skip, не fail. PNG capacity варьируется +-10% в
-        зависимости от текстуры изображения.
+        Best-effort: if this particular carrier's capacity turns out slightly
+        smaller, skip, do not fail. PNG capacity varies by +-10%
+        depending on image texture.
         """
         service = StegoService()
         try:
@@ -111,17 +111,17 @@ class TestE2ELoadPNG:
 
 
 class TestE2ELoadWAV:
-    """Нагрузочное тестирование WAV-LSB.
+    """Load testing of WAV-LSB.
 
-    WAV-LSB обрабатывает большие файлы значительно дешевле PNG - нет
-    grayscale-конвертации и edge-detection в spatial domain. Тестируем
-    реальные нагрузки на 68MB носителе.
+    WAV-LSB handles large files much more cheaply than PNG — there is no
+    grayscale conversion or edge detection in the spatial domain. We test
+    real loads on a 68MB carrier.
     """
 
     def test_wav_load_500kb_payload(
         self, wav_long: Path, payload_500kb: Path, tmp_path: Path
     ):
-        """WAV ~68МБ + 500КБ payload."""
+        """WAV ~68MB + 500KB payload."""
         service = StegoService()
 
         t0 = time.perf_counter()
@@ -148,10 +148,10 @@ class TestE2ELoadWAV:
     def test_wav_load_750kb_near_capacity(
         self, wav_long: Path, payload_750kb: Path, tmp_path: Path
     ):
-        """WAV 68МБ + 750КБ payload (на границе capacity 850KB).
+        """WAV 68MB + 750KB payload (at the 850KB capacity boundary).
 
-        Best-effort: если конкретный WAV содержит больше тишины, чем
-        ожидалось, capacity уменьшится. В этом случае - skip.
+        Best-effort: if this particular WAV contains more silence than
+        expected, capacity drops. In that case — skip.
         """
         service = StegoService()
         try:
@@ -180,16 +180,16 @@ class TestE2ELoadWAV:
 
 
 class TestE2ELoadJPEG:
-    """Нагрузочное тестирование JPEG-DCT.
+    """Load testing of JPEG-DCT.
 
-    JPEG-DCT capacity 5-10% от размера файла после фильтра
-    среднечастотных AC-коэффициентов. Для 8MB файла - 387KB payload.
+    JPEG-DCT capacity is 5-10% of the file size after the filter of
+    mid-frequency AC coefficients. For an 8MB file that is a 387KB payload.
     """
 
     def test_jpeg_load_100kb_payload(
         self, jpeg_large: Path, payload_100kb: Path, tmp_path: Path
     ):
-        """JPEG 8МБ + 100КБ payload (комфортный запас)."""
+        """JPEG 8MB + 100KB payload (comfortable margin)."""
         service = StegoService()
 
         t0 = time.perf_counter()
@@ -216,9 +216,9 @@ class TestE2ELoadJPEG:
     def test_jpeg_load_300kb_near_capacity(
         self, jpeg_large: Path, payload_300kb: Path, tmp_path: Path
     ):
-        """JPEG 8МБ + 300КБ payload (на границе capacity 387KB).
+        """JPEG 8MB + 300KB payload (at the 387KB capacity boundary).
 
-        Best-effort: capacity DCT-пула зависит от текстуры конкретной фотографии. Если не хватит - skip.
+        Best-effort: DCT-pool capacity depends on the texture of the particular photo. If it is not enough — skip.
         """
         service = StegoService()
         try:
@@ -247,22 +247,22 @@ class TestE2ELoadJPEG:
 
 
 class TestE2ELoadDynamicCapacity:
-    """Динамические capacity-тесты.
+    """Dynamic capacity tests.
 
-    Вместо фиксированных размеров payload используют analyze_capacity()
-    для выяснения реального потолка конкретного носителя и подбирают
-    payload "под 95% capacity". Это  тесты - работают на любых артефактах, не привязаны к точным размерам файлов.
+    Instead of fixed payload sizes they use analyze_capacity()
+    to find the real ceiling of a particular carrier and pick a
+    payload "at 95% capacity". These tests work on any artifacts and are not tied to exact file sizes.
     """
 
     def test_png_capacity_95_percent(
         self, png_large: Path, payload_tiny: Path, tmp_path: Path
     ):
-        """Подбирает payload под 95% реальной capacity PNG-носителя
-        и проверяет полный roundtrip."""
+        """Picks a payload at 95% of the real capacity of the PNG carrier
+        and checks a full roundtrip."""
         service = StegoService()
 
-        # Шаг 1: спрашиваем capacity у сервиса (передаём любой существующий
-        # payload — analyze_capacity использует его только для размера).
+        # Step 1: ask the service for capacity (pass any existing
+        # payload — analyze_capacity uses it only for the size).
         probe_req = StegoTaskRequest(
             carrier_path=png_large,
             payload_path=payload_tiny,
@@ -273,7 +273,7 @@ class TestE2ELoadDynamicCapacity:
         target_payload_size = int(report.capacity_bits / 8 * 0.95) - report.header_size_bytes
         assert target_payload_size > 0, "Capacity слишком мала даже для заголовка"
 
-        # Шаг 2: генерируем payload точно под этот размер.
+        # Step 2: generate a payload of exactly that size.
         import numpy as np
         rng = np.random.default_rng(seed=42)
         dynamic_payload = tmp_path / "dynamic_payload.bin"
@@ -282,7 +282,7 @@ class TestE2ELoadDynamicCapacity:
         print(f"\n[DYNAMIC PNG] capacity={report.capacity_bits} bits, "
               f"payload={target_payload_size} bytes (95% load)")
 
-        # Шаг 3: полный roundtrip.
+        # Step 3: full roundtrip.
         hide_req = StegoTaskRequest(
             carrier_path=png_large,
             payload_path=dynamic_payload,

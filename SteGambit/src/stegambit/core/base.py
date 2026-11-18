@@ -6,155 +6,155 @@ import numpy as np
 T = TypeVar("T")
 
 class IStegoProcessor(ABC, Generic[T]):
-    """Контракт стратегии стеганографического внедрения/извлечения.
+    """Contract for a steganographic embedding/extraction strategy.
 
-    Параметризован типом контейнера T:
-        - LsbProcessor:  T = np.ndarray (пиксели PNG / семплы WAV).
-        - DctProcessor:  T = JpegContainer (квантованные DCT-коэффициенты + метаданные).
+    Parameterized by container type T:
+        - LsbProcessor:  T = np.ndarray (PNG pixels / WAV samples).
+        - DctProcessor:  T = JpegContainer (quantized DCT coefficients + metadata).
 
-    Контракт coords неизменен для всех реализаций: одномерный массив int64
-    с плоскими индексами позиций, куда встраивать / откуда извлекать биты.
+    The coords contract is unchanged for every implementation: a one-dimensional int64
+    array of flat indices of the positions to embed into / extract bits from.
     """
 
     @abstractmethod
     def embed(self, container: T, payload: bytes, coords: np.ndarray, *, lsb_depth: int = 1) -> T:
-        """Внедрить payload в контейнер по координатам.
+        """Embed the payload into the container at the given coordinates.
 
         Args:
-            container: Контейнер-носитель.
-                       Для LSB: ndarray (H, W, 3) uint8 для изображений или
-                                (N,) int16 для WAV.
-                       Для DCT: JpegContainer с квантованными коэффициентами.
-            payload:   Готовый бинарный блоб (шифротекст из CryptoEngine).
-            coords:    int64-массив плоских индексов.
-                       Для LSB — индексы в container.flat.
-                       Для DCT — индексы в JpegContainer.coef_arrays[0].ravel(),
-                                 отфильтрованные через get_embeddable_positions().
-            lsb_depth: Сколько младших бит использовать на элемент (1..4).
-                       В MVP поддерживается только lsb_depth=1.
+            container: Carrier container.
+                       For LSB: ndarray (H, W, 3) uint8 for images or
+                                (N,) int16 for WAV.
+                       For DCT: JpegContainer with quantized coefficients.
+            payload:   Ready binary blob (ciphertext from CryptoEngine).
+            coords:    int64 array of flat indices.
+                       For LSB — indices into container.flat.
+                       For DCT — indices into JpegContainer.coef_arrays[0].ravel(),
+                                 filtered via get_embeddable_positions().
+            lsb_depth: How many least significant bits to use per element (1..4).
+                       The MVP supports only lsb_depth=1.
 
         Returns:
-            Модифицированный контейнер того же типа. Для DCT может быть тот же
-            объект (локальная модификация экономит память на больших JPEG).
+            Modified container of the same type. For DCT it may be the same
+            object (in-place modification saves memory on large JPEGs).
         """
         ...
 
     @abstractmethod
     def extract(self, container: T, coords: np.ndarray, length: int, *, lsb_depth: int = 1) -> bytes:
-        """Извлечь length байт payload из контейнера по координатам.
+        """Extract length bytes of payload from the container at the given coordinates.
 
         Args:
-            length: Длина payload в байтах (нужна, чтобы остановиться после нужного числа бит).
+            length: Payload length in bytes (needed in order to stop after the required number of bits).
         """
         ...
 
 
 class ISpreader(ABC):
-    """Контракт генератора координат внедрения payload в контейнер.
+    """Contract for a generator of payload embedding coordinates in a container.
 
-    Реализация определяет стратегию выбора позиций — равномерную, content-aware
-    (по edge detection), частотно-ограниченную (для DCT) и т.д. Контракт
-    одинаков для всех вариантов: вход — контейнер + длина payload + пароль,
-    выход — массив координат.
+    The implementation defines the position-selection strategy — uniform, content-aware
+    (via edge detection), frequency-limited (for DCT), and so on. The contract
+    is the same for every variant: input is the container + payload length + password,
+    output is an array of coordinates.
 
     Note:
-        Все реализации должны быть детерминированными: один и тот же пароль
-        на одном и том же контейнере даёт ту же последовательность координат.
-        Это критично для корректной работы extract.
+        Every implementation must be deterministic: the same password
+        on the same container yields the same coordinate sequence.
+        This is critical for extract to work correctly.
     """
 
     @abstractmethod
     def get_max_capacity_bits(self, container: np.ndarray) -> int:
-        """Возвращает доступную ёмкость контейнера в битах.
+        """Returns the available carrier capacity in bits.
 
-        Считается ПОСЛЕ применения всех фильтров (edge-detection, маски и пр.),
-        поэтому отражает реальное число позиций, а не геометрический размер.
+        Counted AFTER all filters are applied (edge detection, masks, and so on),
+        so it reflects the real number of positions, not the geometric size.
 
         Args:
-            container: Любой ndarray-контейнер (RGB image, audio samples).
+            container: Any ndarray container (RGB image, audio samples).
 
         Returns:
-            Число свободных позиций в пуле координат.
+            Number of free positions in the coordinate pool.
         """
         ...
 
     @abstractmethod
     def generate_coords(self, container: np.ndarray, payload_bits_len: int, password_seed: str,
                         exclude_coords: Optional[Set[int]] = None) -> np.ndarray:
-        """Возвращает payload_bits_len flat-индексов в `container.flat`.
+        """Returns payload_bits_len flat indices into `container.flat`.
 
         Args:
-            container:        Контейнер-носитель.
-            payload_bits_len: Сколько координат нужно (= число бит в payload).
-            password_seed:    Пароль для детерминированной перестановки.
-            exclude_coords:   Координаты, исключаемые из пула — задел на
-                              Plausible Deniability (ADR 004, флаг IS_DECOY).
-                              При extract decoy эти позиции должны быть
-                              запрещены для реального payload.
+            container:        Carrier container.
+            payload_bits_len: How many coordinates are needed (= number of bits in the payload).
+            password_seed:    Password for the deterministic permutation.
+            exclude_coords:   Coordinates excluded from the pool — a provision for
+                              Plausible Deniability (ADR 004, IS_DECOY flag).
+                              On decoy extract these positions must be
+                              forbidden for the real payload.
 
         Returns:
-            1D ndarray длины payload_bits_len с flat-индексами.
+            1D ndarray of length payload_bits_len with flat indices.
 
         Raises:
-            ValueError: Если пул после фильтрации меньше payload_bits_len.
+            ValueError: If the pool after filtering is smaller than payload_bits_len.
         """
         pass
 
 
 class FileFormat(ABC):
-    """Базовый интерфейс для контейнеров-носителей (PNG, WAV, JPEG, ...).
+    """Base interface for carrier containers (PNG, WAV, JPEG, ...).
 
-    Каждая реализация инкапсулирует:
-        * Magic bytes для идентификации формата (см. FormatIdentifier).
-        * Декодирование файла в numpy-представление, удобное для embed/extract.
-        * Сериализацию модифицированного представления обратно на диск
-          БЕЗ потерь относительно исходного формата (анти-конверсия, ADR 003).
+    Each implementation encapsulates:
+        * Magic bytes for format identification (see FormatIdentifier).
+        * Decoding a file into a numpy representation suitable for embed/extract.
+        * Serializing the modified representation back to disk
+          WITHOUT loss relative to the original format (anti-conversion, ADR 003).
 
     Note:
-        Для форматов, где numpy-массива недостаточно (например, JPEG нужен
-        целый набор коэф-таблиц + кватаблицы), реализация возвращает
-        собственный контейнерный объект (JpegContainer). В таком случае
-        возврат типизирован как ndarray для общего интерфейса, но фактически
-        это конкретный контейнер.
+        For formats where a numpy array is not enough (for example, JPEG needs
+        a whole set of coefficient tables + quantization tables), the implementation returns
+        its own container object (JpegContainer). In that case
+        the return type is annotated as ndarray for the common interface, but in practice
+        it is a concrete container.
     """
 
     @property
     @abstractmethod
     def magic(self) -> bytes:
-        """Magic bytes-маркер для идентификации формата по сырому потоку байт.
+        """Magic-byte marker for identifying the format from a raw byte stream.
 
         Returns:
-            Префикс файла, уникальный для данного формата. Используется
-            FormatIdentifier для определения типа до открытия файла.
+            File prefix unique to this format. Used by
+            FormatIdentifier to determine the type before the file is opened.
         """
         ...
 
     @abstractmethod
     def load(self, path: Path) -> np.ndarray:
-        """Декодирует файл в numpy-представление.
+        """Decodes a file into a numpy representation.
 
         Args:
-            path: Абсолютный путь к существующему файлу.
+            path: Absolute path to an existing file.
 
         Returns:
-            ndarray (или контейнерный объект для сложных форматов),
-            готовый к передаче в стего-процессор.
+            ndarray (or a container object for complex formats),
+            ready to pass to the stego processor.
 
         Raises:
-            FileNotFoundError:     Файл не найден.
-            CorruptedCarrierError: Файл повреждён или не соответствует формату.
+            FileNotFoundError:     File not found.
+            CorruptedCarrierError: The file is corrupt or does not match the format.
         """
         ...
 
     @abstractmethod
     def save(self, data: np.ndarray, path: Path) -> None:
-        """Сериализует numpy-представление обратно в файл.
+        """Serializes the numpy representation back to a file.
 
         Args:
-            data: Контейнер после embed/extract.
-            path: Путь сохранения. Расширение должно соответствовать формату.
+            data: Container after embed/extract.
+            path: Save path. The extension must match the format.
 
         Raises:
-            OSError: Если запись на диск невозможна (нет прав, нет места).
+            OSError: If writing to disk is impossible (no permissions, no space).
         """
         ...

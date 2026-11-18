@@ -1,72 +1,72 @@
 # E2E Testing Report — SteGambit
 
-**Дата прогона:** 2026-06-18
-**Версия:** AlphaCentavra
-**Тестировщик:** Back-End
-**Платформа:** Windows 10, Python 3.12.2
+**Run date:** 2026-06-18
+**Version:** AlphaCentavra
+**Tester:** Back-End
+**Platform:** Windows 10, Python 3.12.2
 **Pytest:** 9.0.3
 
 ---
 
-## 1. Цели тестирования
+## 1. Test objectives
 
-Финальный этап pipeline тестирования:
+Final stage of the testing pipeline:
 
-- Подтвердить корректность всех публичных API `StegoService` на реальных файлах.
-- Проверить полный пользовательский сценарий hide → диск → extract без моков.
-- Замерить производительность на нагрузочных сценариях.
-- Зафиксировать граничные условия (capacity, неверный пароль, битые файлы).
-- Документировать ограничения системы по итогам наблюдений.
+- Confirm that every public `StegoService` API behaves correctly on real files.
+- Check the full user scenario hide → disk → extract with no mocks.
+- Measure performance on load scenarios.
+- Record boundary conditions (capacity, wrong password, corrupt files).
+- Document system limitations from the observations.
 
-**Принцип:** чёрный ящик. Тесты не знают о внутреннем устройстве, работают
-только через публичный API DTO ↔ Service.
+**Principle:** black box. The tests do not know the internal design. They work
+only through the public DTO ↔ Service API.
 
 ---
 
-## 2. Структура тестов
+## 2. Test structure
 tests/e2e/
-├── conftest.py # Локальные фикстуры (load-носители, генераторы payload, helpers)
-├── test_e2e_smoke.py # 15 тестов, быстрые сценарии (~10-30 сек)
-└── test_e2e_load.py # 7 тестов, нагрузочные (~3-6 минут под маркером @pytest.mark.load)
+├── conftest.py # Local fixtures (load carriers, payload generators, helpers)
+├── test_e2e_smoke.py # 15 tests, fast scenarios (~10-30 sec)
+└── test_e2e_load.py # 7 tests, load scenarios (~3-6 minutes under the @pytest.mark.load marker)
 
 
 
-### Маркер `load`
+### The `load` marker
 
-Long-running тесты помечены `pytestmark = pytest.mark.load` и **не запускаются**
-по умолчанию. Это защита от случайного запуска тяжёлых сценариев в обычном
-прогоне.
+Long-running tests are marked with `pytestmark = pytest.mark.load` and **are not run**
+by default. This keeps heavy scenarios from starting accidentally during a normal
+run.
 
 ```bash
-# Smoke (по умолчанию):
+# Smoke (default):
 pytest tests/e2e/
 
-# Load (явный опт-ин):
+# Load (explicit opt-in):
 pytest tests/e2e/test_e2e_load.py -m load -v -s
 ```
 
-## 3. Покрытие — Smoke-тесты
-| Группа | Тестов | Что покрывает |
+## 3. Coverage — smoke tests
+| Group | Tests | What it covers |
 |---|---|---|
 | Happy Path | 4 | Roundtrip PNG/WAV/JPEG + visual metrics |
-| Metrics | 2 | PSNR ≥ 40dB, ключи в response.metrics |
+| Metrics | 2 | PSNR ≥ 40 dB, keys in response.metrics |
 | Edge Cases | 7 | Capacity overflow, wrong password, corrupted carrier, empty password, anti-conversion, format-detection (known + unknown) |
-| Capacity Report | 2 | analyze_capacity предсказывает fit/no-fit |
+| Capacity Report | 2 | analyze_capacity predicts fit/no-fit |
 
-Итого: 15 тестов, все ✅ PASSED.
+Total: 15 tests, all ✅ PASSED.
 
-## 4. Покрытие — Load-тесты
-| Группа | Тестов | Носитель | Payload-диапазон |
+## 4. Coverage — load tests
+| Group | Tests | Carrier | Payload range |
 |---|---|---|---|
-| PNG-LSB | 2 | large.png ~3.5 МБ | 250 КБ + 350 КБ (edge) |
-| WAV-LSB | 2 | long.wav ~68 МБ | 500 КБ + 750 КБ (edge) |
-| JPEG-DCT | 2 | large_photo.jpg ~8 МБ | 100 КБ + 300 КБ (edge) |
-| Dynamic Capacity | 1 | large.png | 95% от реальной capacity |
+| PNG-LSB | 2 | large.png ~3.5 MB | 250 KB + 350 KB (edge) |
+| WAV-LSB | 2 | long.wav ~68 MB | 500 KB + 750 KB (edge) |
+| JPEG-DCT | 2 | large_photo.jpg ~8 MB | 100 KB + 300 KB (edge) |
+| Dynamic Capacity | 1 | large.png | 95% of the real capacity |
 
-Итого: 7 тестов, ✅ PASSED.
+Total: 7 tests, ✅ PASSED.
 
-## 5. Результаты — Smoke
-| # | Тест | Результат |
+## 5. Results — smoke
+| # | Test | Result |
 |---|---|---|
 | 1 | test_png_text_roundtrip | ✅ PASS |
 | 2 | test_wav_pdf_roundtrip | ✅ PASS |
@@ -84,53 +84,53 @@ pytest tests/e2e/test_e2e_load.py -m load -v -s
 | 14 | test_capacity_fits_for_small_payload | ✅ PASS |
 | 15 | test_capacity_no_fit_warns_before_hide | ✅ PASS |
 
-Общее время smoke-прогона: ~15 секунд.
+Total smoke run time: ~15 seconds.
 
-## 6. Результаты — Load
-| # | Тест | Время hide | PSNR | Результат |
+## 6. Results — load
+| # | Test | Hide time | PSNR | Result |
 |---|---|---|---|---|
-| 1 | test_png_load_250kb_payload | ~Xс | >40 dB | ✅ PASS |
-| 2 | test_png_load_350kb_near_capacity | ~Xс | >40 dB | ✅ PASS / SKIP* |
+| 1 | test_png_load_250kb_payload | ~X s | >40 dB | ✅ PASS |
+| 2 | test_png_load_350kb_near_capacity | ~X s | >40 dB | ✅ PASS / SKIP* |
 | 3 | test_wav_load_500kb_payload | 0.92 s | N/A (WAV) | ✅ PASS |
-| 4 | test_wav_load_750kb_near_capacity | ~Xс | N/A | ✅ PASS / SKIP* |
+| 4 | test_wav_load_750kb_near_capacity | ~X s | N/A | ✅ PASS / SKIP* |
 | 5 | test_jpeg_load_100kb_payload | 1.74 s | N/A (DCT) | ✅ PASS |
-| 6 | test_jpeg_load_300kb_near_capacity | ~Xс | N/A | ✅ PASS / SKIP* |
-| 7 | test_png_capacity_95_percent (dynamic) | ~Xс | >40 dB | ✅ PASS |
+| 6 | test_jpeg_load_300kb_near_capacity | ~X s | N/A | ✅ PASS / SKIP* |
+| 7 | test_png_capacity_95_percent (dynamic) | ~X s | >40 dB | ✅ PASS |
 
-*SKIP — это корректное поведение для edge-тестов: capacity конкретного
-файла оказалась чуть меньше ожидаемой, тест помечается как пропущенный,
-а не упавший. Документировано в docstring каждого near_capacity теста.
+*SKIP is the correct outcome for edge tests: the capacity of that particular
+file was slightly below the expected value, so the test is marked skipped
+rather than failed. This is documented in the docstring of each near_capacity test.
 
-Примечание: замеры времени получены на конкретной машине разработчика.
-Точные цифры зависят от железа и приведены здесь как референс, не как SLA.
+Note: the timings were taken on one developer machine.
+Exact numbers depend on the hardware and are a reference here, not an SLA.
 
-## 7. Граничные условия — детальная таблица
-| Сценарий | Ожидание | Фактическое поведение |
+## 7. Boundary conditions — detailed table
+| Scenario | Expectation | Actual behavior |
 |---|---|---|
-| Payload > capacity | CompatibilityError или ValueError с понятным сообщением | ✅ Бросается ValueError с указанием требуется/доступно/не хватает |
-| Wrong password на extract | InvalidFrameError или InvalidPasswordError | ✅ Бросается одно из двух (MAC mismatch или MAGIC mismatch) |
-| Битый PNG-носитель | Graceful failure через CorruptedCarrierError | ✅ PIL ловится, оборачивается в CorruptedCarrierError |
-| Пустой пароль | Допустимо | ✅ DTO валидирует, hide_data проходит |
-| Анти-конверсия (PNG → .wav) | CompatibilityError | ✅ Проверка расширения в hide_data блокирует |
-| Payload PNG/WAV/JPEG → extract | Авто-расширение | ✅ FormatIdentifier опознаёт magic bytes, output получает корректный suffix |
-| Payload PDF (неподдержан) | Fallback на .bin | ✅ FormatIdentifier бросает ValueError → дефолт .bin, содержимое целое |
-| Capacity overflow в analyze_capacity | fits=False без бросания | ✅ Отчёт корректен до фактической операции |
+| Payload > capacity | CompatibilityError or ValueError with a clear message | ✅ A ValueError is raised stating required / available / shortfall |
+| Wrong password on extract | InvalidFrameError or InvalidPasswordError | ✅ One of the two is raised (MAC mismatch or MAGIC mismatch) |
+| Corrupt PNG carrier | Graceful failure via CorruptedCarrierError | ✅ The PIL error is caught and wrapped in CorruptedCarrierError |
+| Empty password | Allowed | ✅ The DTO validates it and hide_data succeeds |
+| Anti-conversion (PNG → .wav) | CompatibilityError | ✅ The extension check in hide_data blocks it |
+| Payload PNG/WAV/JPEG → extract | Automatic extension | ✅ FormatIdentifier recognizes the magic bytes and the output gets the correct suffix |
+| Payload PDF (unsupported) | Fallback to .bin | ✅ FormatIdentifier raises ValueError → default .bin, contents intact |
+| Capacity overflow in analyze_capacity | fits=False without raising | ✅ The report is correct before the actual operation |
 
-### 8.1 PNG-носители — потолок ~3.5 МБ
-Симптом: при попытке использовать PNG > 4-5 МБ (≈ 3000×3000 RGB и выше)
-на бытовых конфигурациях (16 ГБ RAM) система уходит в своп и зависает.
-В одном из прогонов это привело к перегрузке БП и выбросу процесса OOM Killer-ом 
-(либо выбросу исключения `MemoryError` в Python). 
+### 8.1 PNG carriers — ceiling around 3.5 MB
+Symptom: when a PNG larger than 4-5 MB is used (about 3000×3000 RGB and above)
+on a consumer machine (16 GB RAM), the system swaps and hangs.
+In one run this overloaded the power supply and the process was killed by the OOM killer
+(or Python raised `MemoryError`).
 
-**Текущий воркэраунд:** ограничение размера принимаемого файла-носителя до 3.5 МБ 
-(валидация на уровне API/DTO).
+**Current workaround:** limit the accepted carrier file size to 3.5 MB
+(validation at the API/DTO level).
 
-### 8.2 Потребление памяти при LSB
-**Причина ограничений выше:** текущий алгоритм внедрения в PNG выгружает 
-матрицу пикселей (numpy array / PIL Image) в оперативную память целиком. 
-Для RGBA-изображений размер массива в памяти многократно превышает размер 
-сжатого PNG на диске. 
+### 8.2 Memory use during LSB
+**Cause of the limits above:** the current PNG embedding algorithm loads the
+entire pixel matrix (numpy array / PIL Image) into memory.
+For RGBA images, the in-memory array is many times larger than the
+compressed PNG on disk.
 
-**Архитектурная рекомендация на будущее:** для снятия лимитов потребуется 
-реализовать потоковое (chunk-oriented) чтение/изменение строк пикселей. 
-В рамках текущей версии AlphaCentavra признано допустимым ограничением.
+**Architectural recommendation for later:** removing the limits will require
+streaming (chunk-oriented) reads and updates of pixel rows.
+For the current AlphaCentavra release this is accepted as an allowable limitation.

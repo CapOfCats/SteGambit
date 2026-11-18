@@ -1,26 +1,26 @@
-# ADR 007: Политика маршрутизации форматов и "Анти-Конверсия"
+# ADR 007: Format Routing Policy and "Anti-Conversion"
 
-**Дата:** 2026-05-06
-**Статус:** Утверждено
-**Контекст:** Гарантия выживаемости скрытых данных за счет жесткой привязки алгоритмов сокрытия к физическим свойствам файлов-контейнеров и запрет на lossy-конвертацию.
+**Date:** 2026-05-06
+**Status:** Approved
+**Context:** Guarantee survival of hidden data by binding embedding algorithms tightly to the physical properties of carrier files, and by forbidding lossy conversion.
 
-## 1. Проблематика (Anti-Conversion Constraint)
-Разные медиа-форматы используют разные принципы хранения данных. Внедрение младшего бита (LSB) в lossy-формат (JPEG) приведет к уничтожению Payload при сохранении файла. Наоборот, применение DCT (частотного преобразования) к математически точным форматам (WAV) избыточно и влечет неоправданные искажения. 
-**Правило Анти-Конверсии:** Формат итогового  файла обязан строго совпадать с форматом исходного файла.
+## 1. Problem (Anti-Conversion Constraint)
+Different media formats store data differently. Embedding the least significant bit (LSB) into a lossy format (JPEG) destroys the payload when the file is saved. Conversely, applying DCT (a frequency transform) to mathematically exact formats (WAV) is redundant and causes unjustified distortion.
+**Anti-conversion rule:** The format of the output file must match the format of the source file exactly.
 
-## 2. Архитектурная Матрица Совместимости (Routing Matrix)
-Система работает по принципу жесткой маршрутизации: формат контейнера однозначно диктует допустимый процессор (алгоритм).
+## 2. Architectural Compatibility Matrix (Routing Matrix)
+The system uses strict routing: the carrier format uniquely dictates the allowed processor (algorithm).
 
-| Формат контейнера | Сигнатура (Magic Bytes) | Характеристика | Назначенный алгоритм | Домен сокрытия |
+| Carrier format | Signature (Magic Bytes) | Characteristic | Assigned algorithm | Embedding domain |
 | :--- | :--- | :--- | :--- | :--- |
-| **PNG** | `89 50 4E 47` | Lossless Image | **LSB** (`LsbProcessor`) | Пространственный (Spatial) |
-| **WAV** | `52 49 46 46` | Lossless Audio | **LSB** (`LsbProcessor`) | Временно-пространственный |
-| **JPEG** | `FF D8 FF E0` | Lossy Image | **DCT** (`DctProcessor`) | Частотный (Frequency) |
+| **PNG** | `89 50 4E 47` | Lossless Image | **LSB** (`LsbProcessor`) | Spatial |
+| **WAV** | `52 49 46 46` | Lossless Audio | **LSB** (`LsbProcessor`) | Temporal-spatial |
+| **JPEG** | `FF D8 FF E0` | Lossy Image | **DCT** (`DctProcessor`) | Frequency |
 
-## 3. Архитектурный Контракт (Validation Layer)
-Слой валидации (Фасад или `StrategoService`) при обработке `StegoTaskRequest` обязан:
-1. Прочитать заголовок Carrier-файла и определить реальный формат (игнорируя расширение в имени файла).
-2. Выбрать соответствующий Processor на основе Матрицы Совместимости.
-3. Блокировать запрос с выбросом `CompatibilityError`, если:
-   * Запрошено недопустимое пересечение (например, юзер принудительно требует `LSB` для `JPEG`).
-   * Расширение выходного файла `output_path` отличается от исходного формата контейнера (попытка конвертации).
+## 3. Architectural Contract (Validation Layer)
+The validation layer (the facade, or `StrategoService`) must, when handling `StegoTaskRequest`:
+1. Read the carrier file header and determine the real format (ignoring the extension in the file name).
+2. Select the matching Processor from the Compatibility Matrix.
+3. Reject the request by raising `CompatibilityError` if:
+   * An illegal combination is requested (for example, the user forces `LSB` for `JPEG`).
+   * The `output_path` extension differs from the source carrier format (a conversion attempt).

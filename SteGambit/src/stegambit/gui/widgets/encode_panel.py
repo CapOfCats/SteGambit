@@ -9,7 +9,7 @@ from .file_panel import FileSelectionPanel
 
 
 class EncodePanel(QWidget):
-    """Вкладка ENCODE главного окна."""
+    """ENCODE tab of the main window."""
 
     request_check = pyqtSignal()
     request_hide = pyqtSignal()
@@ -23,11 +23,11 @@ class EncodePanel(QWidget):
         root.setSpacing(10)
         root.setContentsMargins(10, 10, 10, 10)
 
-        # Файловая панель
+        # File panel
         self.file_panel = FileSelectionPanel()
         root.addWidget(self.file_panel)
 
-        # Кнопка Check Compatibility
+        # Check Compatibility button
         btn_row = QHBoxLayout()
         btn_row.addStretch()
         self.btn_check = QPushButton("● Check Compatibility")
@@ -38,7 +38,7 @@ class EncodePanel(QWidget):
         btn_row.addStretch()
         root.addLayout(btn_row)
 
-        # Блок результатов совместимости
+        # Compatibility results block
         self.compatibility_box = QTextEdit()
         self.compatibility_box.setReadOnly(True)
         self.compatibility_box.setMaximumHeight(90)
@@ -51,13 +51,13 @@ class EncodePanel(QWidget):
         self.compatibility_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
         root.addWidget(self.compatibility_box)
 
-        # Разделитель
+        # Separator
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
         sep.setStyleSheet("color: #3a3a3a;")
         root.addWidget(sep)
 
-        # Кнопка HIDE DATA
+        # HIDE DATA button
         hide_row = QHBoxLayout()
         hide_row.addStretch()
         self.btn_hide = QPushButton("🔒 HIDE DATA (File-in-File)")
@@ -69,7 +69,7 @@ class EncodePanel(QWidget):
         hide_row.addStretch()
         root.addLayout(hide_row)
 
-        # Прогресс-бар
+        # Progress bar
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
@@ -77,7 +77,7 @@ class EncodePanel(QWidget):
         self.progress_bar.setVisible(False)
         root.addWidget(self.progress_bar)
 
-        # Лейбл текущего действия
+        # Current-action label
         self.label_action = QLabel("")
         self.label_action.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label_action.setStyleSheet("color: #888888; font-size: 12px;")

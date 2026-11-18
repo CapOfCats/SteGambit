@@ -17,8 +17,8 @@ class EncodeDialogResult:
 
 class EncodeDialog(QDialog):
     """
-    Диалог Configure Protection — появляется поверх MainWindow
-    при нажатии HIDE DATA, до запуска операции.
+    Configure Protection dialog — appears over MainWindow
+    when HIDE DATA is pressed, before the operation starts.
     """
 
     confirmed = pyqtSignal(EncodeDialogResult)
@@ -123,7 +123,7 @@ class EncodeDialog(QDialog):
         mode = QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
         self.edit_pass1.setEchoMode(mode)
         self.edit_pass2.setEchoMode(mode)
-        # Qt dynamic property → QSS [active="true"] перерисует кнопку без inline-стилей
+        # Qt dynamic property → QSS [active="true"] restyles the button without inline styles
         self.btn_toggle_pass.setProperty("active", "true" if checked else "false")
         self.btn_toggle_pass.style().unpolish(self.btn_toggle_pass)
         self.btn_toggle_pass.style().polish(self.btn_toggle_pass)
@@ -132,9 +132,9 @@ class EncodeDialog(QDialog):
         p1 = self.edit_pass1.text()
         p2 = self.edit_pass2.text()
         match = p1 == p2
-        # Индикатор "Match" — только если реально что-то введено и совпадает
+        # "Match" indicator — only when something was actually typed and it matches
         self.lbl_match.setVisible(match and len(p1) > 0)
-        # Пустой пароль разрешён — дефолт "secret" подставится в _on_start
+        # Empty password is allowed — the default "secret" is substituted in _on_start
         self.btn_start.setEnabled(
             match and bool(self.edit_output.text().strip())
         )
@@ -168,7 +168,7 @@ class EncodeDialog(QDialog):
                 "Step 1: [??? Source Files Invalid] (Check file selection)"
             )
             self.lbl_step1.setObjectName("lbl_step1_invalid")
-        # Форсируем перерисовку после смены objectName
+        # Force a repaint after the objectName change
         self.lbl_step1.style().unpolish(self.lbl_step1)
         self.lbl_step1.style().polish(self.lbl_step1)
 

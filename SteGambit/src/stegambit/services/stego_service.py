@@ -1,4 +1,4 @@
-"""StegoService — главный Фасад пайплайна сокрытия."""
+"""StegoService — main facade of the concealment pipeline."""
 from pathlib import Path
 from typing import Any, Optional
 
@@ -44,10 +44,10 @@ _EXT_TO_FORMAT = {".png": "PNG", ".wav": "WAV", ".jpeg": "JPEG", ".jpg": "JPEG"}
 
 
 class StegoService:
-    """Синхронный Фасад: валидация → crypto → spread → embed → save.
+    """Synchronous facade: validation → crypto → spread → embed → save.
 
-    Для JPEG: использует JSteg-пайплайн через DctProcessor + JpegContainer.
-    Для PNG/WAV: LSB-пайплайн через LsbProcessor + ndarray.
+    For JPEG: uses the JSteg pipeline via DctProcessor + JpegContainer.
+    For PNG/WAV: LSB pipeline via LsbProcessor + ndarray.
     """
 
     def __init__(self) -> None:
@@ -59,10 +59,10 @@ class StegoService:
         self._dct_spreader = DctSpreader()
 
     def hide_data(self, request: StegoTaskRequest) -> StegoResponse:
-        """Выполняет полный пайплайн сокрытия по StegoTaskRequest."""
+        """Runs the full concealment pipeline for a StegoTaskRequest."""
         t0 = time.perf_counter()
 
-        # 1. Определение формата и проверка политики анти-конверсии.
+        # 1. Detect the format and enforce the anti-conversion policy.
         carrier_fmt = self._identifier.identify(request.carrier_path)
         out_ext = Path(request.output_path).suffix.lower()
         if _EXT_TO_FORMAT.get(out_ext) != carrier_fmt:
@@ -76,22 +76,22 @@ class StegoService:
                 f"Поддержанные форматы: {list(_FORMAT_REGISTRY)}"
             )
 
-        # 2. Загрузка контейнера через фабрику.
+        # 2. Load the container via the factory.
         fmt_handler = _FORMAT_REGISTRY[carrier_fmt]()
         original = fmt_handler.load(request.carrier_path)
 
-        # 3. Чтение и шифровка "груза".
+        # 3. Read and encrypt the payload.
         payload_bytes = Path(request.payload_path).read_bytes()
         encrypted = self._crypto.encrypt(payload_bytes, request.password)
 
-        # 4. Выбор процессора и сборка пула координат.
-        #    Для LSB пул — все индексы контейнера. Для DCT — только валидные
-        #    AC-коэффициенты (фильтрация от DctProcessor). Ветвление LSB/DCT
-        #    инкапсулировано в _build_pool, чтобы не засорять основной пайплайн.
+        # 4. Select the processor and build the coordinate pool.
+        #    For LSB the pool is every container index. For DCT only valid
+        #    AC coefficients (filtered by DctProcessor). LSB/DCT branching
+        #    is encapsulated in _build_pool so the main pipeline stays clean.
         processor_kind = _FORMAT_TO_PROCESSOR[carrier_fmt]
         pool, processor = self._build_pool(processor_kind, original)
 
-        # 5. Ёмкостная валидация (критично для JPEG, не критично для LSB).
+        # 5. Capacity validation (critical for JPEG, not critical for LSB).
         required_bits = len(encrypted) * 8
         if pool.size < required_bits:
             raise CompatibilityError(
@@ -99,7 +99,7 @@ class StegoService:
                 f"требуется {required_bits}. Возьмите более крупный носитель или уменьшите payload."
             )
 
-        # 6. Генерация координат. Spreader сам знает, как из своего пула получить детерминированную перестановку под seed.
+        # 6. Generate coordinates. The spreader knows how to turn its pool into a deterministic permutation under the seed.
         spreader = self._lsb_spreader if processor_kind == "LSB" else self._dct_spreader
         coords = spreader.generate_coords(
             container=original,
@@ -107,18 +107,18 @@ class StegoService:
             password_seed=request.password,
         )
 
-        # Снапшот для sanity-check (только DCT — для LSB sanity на PSNR=inf).
+        # Snapshot for the sanity check (DCT only — LSB sanity uses PSNR=inf).
         pre_embed_snapshot = None
         if processor_kind == "DCT":
             pre_embed_snapshot = original.coef_arrays[0].copy()
 
-        # 7. Внедрение.
+        # 7. Embedding.
         stego = processor.embed(original, encrypted, coords)
 
-        # 8. Сохраняем.
+        # 8. Save.
         fmt_handler.save(stego, request.output_path)
 
-        # 9. Метрики + sanity-check.
+        # 9. Metrics + sanity check.
         metrics = self._compute_metrics(
             processor_kind, original, stego, t0,
             pre_embed_snapshot=pre_embed_snapshot,
@@ -134,27 +134,27 @@ class StegoService:
         )
     
     def extract_data(self, request: StegoTaskRequest) -> StegoResponse:
-        """Извлекает payload из стего-контейнера.
+        """Extracts the payload from a stego container.
 
-        Зеркало hide_data:
-            1. Загружаем стего-контейнер.
-            2. Строим тот же пул координат (формат тот же -> пул тот же).
-            3. Spreader с тем же паролем -> те же координаты.
-            4. Извлекаем заголовок (57 байт), читаем LENGTH из него.
-            5. Извлекаем заголовок + ciphertext полным размером.
-            6. CryptoEngine.decrypt -> исходные байты.
-            7. Записываем в output_path.
+        Mirror of hide_data:
+            1. Load the stego container.
+            2. Build the same coordinate pool (same format -> same pool).
+            3. Spreader with the same password -> the same coordinates.
+            4. Extract the header (57 bytes) and read LENGTH from it.
+            5. Extract the header + ciphertext at full size.
+            6. CryptoEngine.decrypt -> original bytes.
+            7. Write them to output_path.
 
         Args:
-            request: StegoTaskRequest. carrier_path тут — это стего-файл,
-                     output_path — куда сохранить извлечённый payload.
+            request: StegoTaskRequest. carrier_path is the stego file,
+                     output_path is where to save the extracted payload.
 
         Returns:
-            StegoResponse(success=True, output_path=...) при успехе.
+            StegoResponse(success=True, output_path=...) on success.
         """
         t0 = time.perf_counter()
 
-        # 1. Определение формата стего-контейнера.
+        # 1. Detect the stego container format.
         carrier_fmt = self._identifier.identify(request.carrier_path)
         if carrier_fmt not in _FORMAT_REGISTRY:
             raise CompatibilityError(
@@ -162,16 +162,16 @@ class StegoService:
                 f"Поддержанные: {list(_FORMAT_REGISTRY)}"
             )
 
-        # 2. Загрузка стего.
+        # 2. Load the stego container.
         fmt_handler = _FORMAT_REGISTRY[carrier_fmt]()
         stego = fmt_handler.load(request.carrier_path)
 
-        # 3. Тот же пул, что был при embed.
+        # 3. Same pool as at embed time.
         processor_kind = _FORMAT_TO_PROCESSOR[carrier_fmt]
         pool, processor = self._build_pool(processor_kind, stego)
 
-        # 4. Извлечение заголовка (57 байт) для определения LENGTH.
-        header_size = CryptoEngine.header_size()  # 57 байт, понадобится в отдельной переменной
+        # 4. Extract the header (57 bytes) to determine LENGTH.
+        header_size = CryptoEngine.header_size()  # 57 bytes; kept in its own variable
         header_bits = header_size * 8
 
         if pool.size < header_bits:
@@ -180,7 +180,7 @@ class StegoService:
                 "Возможно, файл не содержит payload."
             )
 
-        # Spreader с тем же паролем даст те же координаты, что при embed.
+        # The same password on the spreader yields the same coordinates as embed.
         spreader = self._lsb_spreader if processor_kind == "LSB" else self._dct_spreader
         coords_for_header = spreader.generate_coords(
             container=stego,
@@ -190,9 +190,9 @@ class StegoService:
 
         header_bytes = processor.extract(stego, coords_for_header, header_size)
 
-        # 6. Парсим LENGTH из заголовка (поле смещено на MAGIC+FLAGS+SALT+NONCE).
-        #    Чтобы не лезть руками, передадим заголовок в CryptoEngine —
-        #    он сам ругнётся на MAGIC, если что-то не так.
+        # 6. Parse LENGTH from the header (offset is MAGIC+FLAGS+SALT+NONCE).
+        #    To avoid hand-parsing, pass the header to CryptoEngine —
+        #    it raises on a bad MAGIC itself.
         
 
         if header_bytes[:FrameLayout.MAGIC_LEN] != FrameLayout.MAGIC:
@@ -210,7 +210,7 @@ class StegoService:
             ">Q", header_bytes[length_offset:length_offset + FrameLayout.LENGTH_LEN]
         )[0]
 
-        # 7. Извлекаем полный фрейм (заголовок + ciphertext).
+        # 7. Extract the full frame (header + ciphertext).
         full_frame_size = header_size + ciphertext_len
         full_frame_bits = full_frame_size * 8
 
@@ -228,11 +228,11 @@ class StegoService:
 
         full_frame = processor.extract(stego, coords_full, full_frame_size)
 
-        # 8. Запись извлечённого payload в файл.
+        # 8. Write the extracted payload to a file.
         payload_bytes = self._crypto.decrypt(full_frame, request.password)
 
-        # Пытаемся определить оригинальный формат payload по magic bytes, чтобы вернуть файл с правильным расширением.
-        # Если формат не опознан (текст, неподдерживаемый бинарь) — дефолтуется .bin.
+        # Try to detect the original payload format from magic bytes so the file gets the right extension.
+        # If the format is unrecognized (text, unsupported binary) it defaults to .bin.
         try:
             payload_fmt = self._identifier.identify_bytes(payload_bytes)
         except ValueError:
@@ -255,39 +255,39 @@ class StegoService:
         )
     
     def identify_format(self, path: Path) -> str:
-        """Определяет формат файла по Magic Bytes.
+        """Detects the file format from magic bytes.
 
-        Публичная обёртка над FormatIdentifier для GUI.
-        GUI не должен импортировать core напрямую.
+        Public wrapper over FormatIdentifier for the GUI.
+        The GUI must not import core directly.
 
         Returns:
             "PNG" | "WAV" | "JPEG"
 
         Raises:
-            ValueError: если формат не поддержан.
+            ValueError: if the format is not supported.
         """
         return self._identifier.identify(path)
     
 
     def analyze_capacity(self, request: StegoTaskRequest) -> CapacityReport:
-        """Предварительная оценка ёмкости БЕЗ фактического сокрытия.
+        """Estimates capacity WITHOUT actually hiding data.
 
-        Используется UI до запуска операции, чтобы показать пользователю
-        реальные цифры и при необходимости заблокировать кнопку Hide.
+        Used by the UI before the operation so the user sees
+        real numbers and Hide can be blocked when needed.
 
-        Шаги:
-            1. Определить формат контейнера (Magic Bytes).
-            2. Загрузить контейнер.
-            3. Построить пул координат тем же способом, что hide_data
-               (для LSB — все пиксели, для DCT — отфильтрованные AC).
-            4. Посчитать и сравнить с размером payload.
+        Steps:
+            1. Detect the container format (magic bytes).
+            2. Load the container.
+            3. Build the coordinate pool the same way as hide_data
+               (for LSB — every pixel, for DCT — filtered AC).
+            4. Compute and compare with the payload size.
 
         Returns:
-            CapacityReport с флагом fits.
+            CapacityReport with the fits flag.
 
         Raises:
-            CompatibilityError: если формат не поддержан.
-            FileNotFoundError:  если файлы не существуют.
+            CompatibilityError: if the format is not supported.
+            FileNotFoundError:  if the files do not exist.
         """
         carrier_fmt = self._identifier.identify(request.carrier_path)
         if carrier_fmt not in _FORMAT_REGISTRY:
@@ -305,9 +305,9 @@ class StegoService:
 
         payload_size = Path(request.payload_path).stat().st_size
         header_size = CryptoEngine.header_size()
-        # Crypto-frame = header (57 байт) + ciphertext (= payload + GCM-tag).
-        # GCM-tag уже включён в header_size согласно нашему FrameLayout,
-        # поэтому считаем как header + payload в битах.
+        # Crypto frame = header (57 bytes) + ciphertext (= payload + GCM tag).
+        # The GCM tag is already included in header_size per our FrameLayout,
+        # so we count header + payload in bits.
         required_bits = (header_size + payload_size) * 8
 
         utilization = (
@@ -326,16 +326,16 @@ class StegoService:
         )
     
     def get_algorithm_for_format(self, fmt: str) -> str:
-        """Возвращает имя алгоритма для формата ('LSB' / 'DCT')."""
+        """Returns the algorithm name for a format ('LSB' / 'DCT')."""
         return _FORMAT_TO_PROCESSOR.get(fmt, "?")
 
     def _build_pool(self, processor_kind: str, container: Any) -> tuple[np.ndarray, Any]:
-        """Удивитесь, но БИЛДИТ ПУЛ. А если серьезно -
-        Возвращает (пул координат, процессор) для выбранного пайплайна.
+        """Builds the coordinate pool.
+        Returns (coordinate pool, processor) for the selected pipeline.
 
-        LSB: пул — все индексы ndarray-контейнера (любой пиксель/семпл валиден).
-        DCT: пул строится через DctProcessor.get_embeddable_positions
-             (среднечастотные AC, без {-1, 0, 1}).
+        LSB: the pool is every ndarray index (any pixel/sample is valid).
+        DCT: the pool is built via DctProcessor.get_embeddable_positions
+             (mid-frequency AC, excluding {-1, 0, 1}).
         """
         if processor_kind == "LSB":
             pool = np.arange(container.size, dtype=np.int64)
@@ -357,18 +357,18 @@ class StegoService:
         output_path: Path | None = None,
         compute_visual_metrics: bool = False,
     ) -> dict:
-        """Считает метрики и выполняет sanity-check.
+        """Computes metrics and runs the sanity check.
 
-        LSB: PSNR + SSIM между двумя ndarray. PSNR=inf -> ни один бит
-             не записался (sanity fail).
-        DCT: PSNR/SSIM на коэффициентах визуально не осмыслен, считаем
-             только время и проверяем, что Y-канал изменился.
-        Общее: size_deviation вычисляется при наличии путей,
-               quality_status — на основе доступных метрик.
+        LSB: PSNR + SSIM between two ndarrays. PSNR=inf means no bit
+             was written (sanity fail).
+        DCT: PSNR/SSIM on coefficients is not visually meaningful; we
+             only time the operation and check that the Y channel changed.
+        Shared: size_deviation is computed when paths are present,
+                quality_status is based on the available metrics.
 
         Returns:
-            dict с ключами: psnr, ssim, time, size_deviation, quality_status - временно строками.
-            Часть ключей может отсутствовать в зависимости от пайплайна.
+            dict with keys: psnr, ssim, time, size_deviation, quality_status — temporarily strings.
+            Some keys may be absent depending on the pipeline.
         """
         elapsed = time.perf_counter() - t0
         metrics: dict[str, Any] = {"time": elapsed}
@@ -384,13 +384,13 @@ class StegoService:
                 )
             metrics["psnr"] = psnr
 
-            # SSIM — психовизуальная метрика, опциональна (~1.5s на 2MB PNG).
-            # Считаем только если фронт явно запросил детальный отчёт.
-            # PSNR выше уже выполнил sanity-check, повторно через SSIM не нужно.
+            # SSIM is a psychovisual metric, optional (~1.5s on a 2MB PNG).
+            # Computed only when the front end explicitly requested a detailed report.
+            # PSNR above already ran the sanity check; repeating it via SSIM is unnecessary.
             if compute_visual_metrics:
                 metrics["ssim"] = calculate_ssim(original_arr, stego_arr)
 
-        #  DCT sanity-check - без PSNR/SSIM 
+        #  DCT sanity check — no PSNR/SSIM
         elif processor_kind == "DCT":
             if pre_embed_snapshot is None:
                 raise RuntimeError(
@@ -403,18 +403,18 @@ class StegoService:
                     "Информация не была внедрена."
                 )
 
-        #  Отклонение размера файла
-        # Считается ПОСЛЕ save(), поэтому пути ВСЕГДА должны быть переданы.
+        #  File size deviation
+        # Computed AFTER save(), so paths must ALWAYS be passed.
         size_dev: Optional[float] = None
         if original_path is not None and output_path is not None:
             try:
                 size_dev = calculate_size_deviation(original_path, output_path)
                 metrics["size_deviation"] = size_dev
             except (FileNotFoundError, OSError):
-                # Файл может быть не записан по ошибке ОС
+                # The file may be missing because of an OS error
                 pass
 
-        # Триггер качества
+        # Quality trigger
         metrics["quality_status"] = evaluate_quality(
             psnr=metrics.get("psnr"),
             size_deviation=size_dev,

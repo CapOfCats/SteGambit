@@ -1,7 +1,7 @@
-"""Byte-perfect round-trip: encode -> decode -> сравнить байты payload.
+"""Byte-perfect round-trip: encode -> decode -> compare payload bytes.
 
-Самый главный интегро инвариант - что положили, то и достали.
-Параметризация по всем поддержанным форматам носителя и разным payload.
+The main integration invariant — what was put in is what comes out.
+Parametrized over every supported carrier format and different payloads.
 """
 import pytest
 
@@ -14,14 +14,14 @@ pytestmark = [pytest.mark.integration]
 @pytest.mark.parametrize(
     "carrier_fixture, payload_fixture, out_ext",
     [
-        # PNG-носитель, LSB-пайплайн.
+        # PNG carrier, LSB pipeline.
         ("png_medium", "payload_tiny", ".png"),
         ("png_medium", "payload_pdf", ".png"),
         ("png_medium", "payload_zip", ".png"),
-        # WAV-носитель, LSB-пайплайн.
+        # WAV carrier, LSB pipeline.
         ("wav_carrier", "payload_tiny", ".wav"),
         ("wav_carrier", "payload_pdf", ".wav"),
-        # JPEG-носитель, DCT-пайплайн.
+        # JPEG carrier, DCT pipeline.
         ("jpeg_carrier", "payload_tiny", ".jpg"),
         ("jpeg_carrier", "payload_pdf", ".jpg"),
     ],
@@ -34,11 +34,11 @@ pytestmark = [pytest.mark.integration]
 def test_roundtrip_byte_identical(
     request, carrier_fixture, payload_fixture, out_ext, tmp_path,
 ):
-    """Encode -> decode -> извлечённые байты идентичны исходному payload.
+    """Encode -> decode -> extracted bytes are identical to the original payload.
 
-    Главный инвариант пайплайна. Если падает - данные искажаются где-то
-    между embed и extract (несоответствие пула координат, ошибка крипты,
-    потери при сохранении формата).
+    The main pipeline invariant. If it fails, data is corrupted somewhere
+    between embed and extract (coordinate-pool mismatch, a crypto error,
+    losses while saving the format).
     """
 
     carrier = request.getfixturevalue(carrier_fixture)
@@ -62,7 +62,7 @@ def test_roundtrip_byte_identical(
     # Decode.
     extract_req = StegoTaskRequest(
         carrier_path=stego_path,
-        payload_path=stego_path,  # не используется при extract
+        payload_path=stego_path,  # unused during extract
         output_path=extract_out,
         password="test_password",
     )
@@ -81,10 +81,10 @@ def test_roundtrip_byte_identical(
 def test_roundtrip_detects_payload_format(
     png_medium, payload_pdf, tmp_path,
 ):
-    """После extract output_path получает корректное расширение по magic bytes.
+    """After extract, output_path gets the correct extension from magic bytes.
 
-    Проверяет интеграцию FormatIdentifier.identify_bytes в extract_data:
-    PDF payload должен быть сохранён с .pdf (не .bin).
+    Checks the integration of FormatIdentifier.identify_bytes into extract_data:
+    a PDF payload must be saved with .pdf (not .bin).
     """
 
     service = StegoService()
@@ -104,19 +104,19 @@ def test_roundtrip_detects_payload_format(
         password="pwd",
     ))
 
-    # PDF не зарегистрирован в _FORMAT_TO_EXT, ожидаем .bin.
-    # Это корректное поведение: get_default_extension знает только PNG/JPEG/WAV.
-    # TODO: Обновить при добавлении PDF
+    # PDF is not registered in _FORMAT_TO_EXT, so .bin is expected.
+    # This is correct behavior: get_default_extension knows only PNG/JPEG/WAV.
+    # TODO: Update when PDF is added
     assert resp.output_path.suffix == ".bin"
 
-    # Но содержимое должно начинаться с PDF-magic %PDF.
+    # But the contents must start with the PDF magic %PDF.
     assert resp.output_path.read_bytes().startswith(b"%PDF")
 
 
 def test_roundtrip_text_payload_detected_as_unknown(
     png_small, payload_tiny, tmp_path,
 ):
-    """Текстовый payload не имеет magic bytes -> сохраняется как .bin."""
+    """A text payload has no magic bytes -> it is saved as .bin."""
 
     service = StegoService()
     stego_path = tmp_path / "stego.png"

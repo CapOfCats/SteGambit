@@ -1,7 +1,7 @@
-"""Integration-тесты на Unicode-пути файлов.
+"""Integration tests of Unicode file paths.
 
-Покрывает: read/write через open(rb)/open(wb) handle вместо строкового пути.
-Покрывает случаи взаимодействий с путями в системе и кодировками.
+Covers: read/write via an open(rb)/open(wb) handle instead of a string path.
+Covers interactions with paths in the OS and with encodings.
 """
 import pytest
 
@@ -12,7 +12,7 @@ from stegambit.services.stego_service import StegoService
 pytestmark = [pytest.mark.integration]
 
 
-# Каталоги, имитирующие реальные пользовательские сценарии.
+# Directories that mimic real user scenarios.
 UNICODE_DIR_NAMES = [
     "кириллица",
     "中文目录",
@@ -30,17 +30,17 @@ def service():
 
 
 class TestUnicodeDirectories:
-    """Кириллица и не-ASCII в каталоге назначения.
+    """Cyrillic and non-ASCII in the destination directory.
 
-    Техника: эквивалентность - один класс "не-ASCII путь",
-    но представителей берём из разных языковых групп на возможные локаль-зависимые баги Windows.
+    Technique: equivalence — one class "non-ASCII path",
+    but we take representatives from different language groups for possible locale-dependent Windows bugs.
     """
 
     @pytest.mark.parametrize("dir_name", UNICODE_DIR_NAMES)
     def test_png_roundtrip_in_unicode_dir(
         self, service, dir_name, png_medium, payload_tiny, tmp_path,
     ):
-        """PNG round-trip в каталоге с не-ASCII именем."""
+        """PNG round-trip in a directory with a non-ASCII name."""
         work_dir = tmp_path / dir_name
         work_dir.mkdir()
         stego_path = work_dir / "stego.png"
@@ -66,7 +66,7 @@ class TestUnicodeDirectories:
     def test_wav_roundtrip_in_unicode_dir(
         self, service, dir_name, wav_carrier, payload_tiny, tmp_path,
     ):
-        """WAV round-trip в каталоге с не-ASCII именем (регресс по scipy.io.wavfile)."""
+        """WAV round-trip in a directory with a non-ASCII name (regression for scipy.io.wavfile)."""
         work_dir = tmp_path / dir_name
         work_dir.mkdir()
         stego_path = work_dir / "stego.wav"
@@ -92,7 +92,7 @@ class TestUnicodeDirectories:
     def test_jpeg_roundtrip_in_unicode_dir(
         self, service, dir_name, jpeg_carrier, payload_tiny, tmp_path,
     ):
-        """JPEG round-trip в каталоге с не-ASCII именем."""
+        """JPEG round-trip in a directory with a non-ASCII name."""
         work_dir = tmp_path / dir_name
         work_dir.mkdir()
         stego_path = work_dir / "stego.jpg"
@@ -116,10 +116,10 @@ class TestUnicodeDirectories:
 
 
 class TestUnicodeFilenames:
-    """Не-ASCII в самом имени файла.
+    """Non-ASCII in the file name itself.
 
-    Граничный кейс: пользователь именует стего-файл "секретик.png"
-    напрямую в Save Dialog. Должно работать на всех форматах.
+    Boundary case: the user names the stego file with a Cyrillic name
+    directly in the Save Dialog. It must work for every format.
     """
 
     @pytest.mark.parametrize(
@@ -141,7 +141,7 @@ class TestUnicodeFilenames:
         self, request, service, filename, carrier_fixture,
         payload_tiny, tmp_path,
     ):
-        """Round-trip когда не-ASCII символы в имени стего-файла."""
+        """Round-trip when the stego file name contains non-ASCII characters."""
         carrier = request.getfixturevalue(carrier_fixture)
         stego_path = tmp_path / filename
         extract_out = tmp_path / "extracted"
@@ -164,19 +164,19 @@ class TestUnicodeFilenames:
 
 
 class TestUnicodeCarrierAndPayload:
-    """Не-ASCII в путях входных файлов.
+    """Non-ASCII in the paths of the input files.
 
-    И cover, и payload, и output - все в кириллице.
+    The cover, the payload, and the output are all in Cyrillic.
     """
 
     def test_all_paths_unicode_png(
         self, service, png_medium, payload_tiny, tmp_path,
     ):
-        """Все три пути (carrier, payload, output) содержат кириллицу."""
+        """All three paths (carrier, payload, output) contain Cyrillic."""
         unicode_dir = tmp_path / "блаблабла"
         unicode_dir.mkdir()
 
-        # Копируем артефакты в unicode-каталог под unicode-именами.
+        # Copy artifacts into the unicode directory under unicode names.
         carrier_uni = unicode_dir / "носитель.png"
         carrier_uni.write_bytes(png_medium.read_bytes())
 

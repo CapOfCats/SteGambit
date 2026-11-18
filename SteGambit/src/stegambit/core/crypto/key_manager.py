@@ -3,36 +3,36 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 
-# TODO: Пока не знаю, зачем здесь класс, предварительно - всё статика. Может измениться в будущем.
+# TODO: Not sure yet why this is a class; for now everything is static. It may change in the future.
 class KeyManager:
-    """Деривация симметричных ключей из пароля.
+    """Symmetric key derivation from a password.
 
-    Используем PBKDF2-HMAC-SHA256, 480000 итераций.
-    Выделено отдельным модулем — чтобы при апгрейде KDF менять только здесь, не трогая CryptoEngine.
+    Uses PBKDF2-HMAC-SHA256, 480000 iterations.
+    Split into its own module so that a KDF upgrade changes only this file and leaves CryptoEngine untouched.
     """
 
     PBKDF2_ITERATIONS = 480_000
-    KEY_LENGTH_BYTES = 32  # по заветам AES-256
+    KEY_LENGTH_BYTES = 32  # as prescribed by AES-256
     SALT_LENGTH_BYTES = 16
 
     @staticmethod
     def generate_salt() -> bytes:
-        """Криптостойкая соль для новой сессии шифрования."""
+        """Cryptographically strong salt for a new encryption session."""
         return os.urandom(KeyManager.SALT_LENGTH_BYTES)
 
     @staticmethod
     def derive_key(password: str, salt: bytes) -> bytes:
-        """На основе Password + Salt генерирует 32-байтный AES-ключ.
+        """Builds a 32-byte AES key from password + salt.
 
         Args:
-            password: пользовательский пароль (любая длина).
-            salt: 16 байт "соли"; должна совпадать при encrypt/decrypt.
+            password: user password (any length).
+            salt: 16 bytes of salt; must match between encrypt and decrypt.
 
         Returns:
-            32 байта ключа для AES-256.
+            32-byte key for AES-256.
 
         Raises:
-            ValueError: если соль неверной длины.
+            ValueError: if the salt has the wrong length.
         """
         if len(salt) != KeyManager.SALT_LENGTH_BYTES:
             raise ValueError(

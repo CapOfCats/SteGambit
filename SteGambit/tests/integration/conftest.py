@@ -1,4 +1,4 @@
-"""Фикстуры уровня unit-тестов.
-    Пока что unit-тесты используют только глобальные фикстуры из tests/conftest.py.
-    TODO: Будет дополняться в #24
+"""Unit-test level fixtures.
+    For now unit tests use only the global fixtures from tests/conftest.py.
+    TODO: Will be extended in #24
 """
