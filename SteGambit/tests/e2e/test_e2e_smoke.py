@@ -1,12 +1,12 @@
-"""E2E Smoke-тесты: быстрые сценарии чёрного ящика.
+"""E2E smoke tests: fast black-box scenarios.
 
-Принцип:
-    ↕ Только публичный API StegoService hide_data  extract_data / analyze_capacity / identify_format.
-    ↕ Реальные артефакты с диска.
-    ↕ Полный roundtrip: hide -- файл на диске -- extract -- diff с оригиналом.
-    ↕ Граничные условия: capacity overflow, неверный пароль, повреждённые файлы, нарушение анти-конверсии.
+Principle:
+    ↕ Only the public StegoService API: hide_data, extract_data / analyze_capacity / identify_format.
+    ↕ Real artifacts from disk.
+    ↕ Full roundtrip: hide -- file on disk -- extract -- diff against the original.
+    ↕ Boundary conditions: capacity overflow, wrong password, corrupted files, anti-conversion violation.
 
-Ожидаемое время прогона: <30 секунд для всей группы.
+Expected runtime: <30 seconds for the whole group.
 """
 from pathlib import Path
 
@@ -22,10 +22,10 @@ from .conftest import assert_bytes_equal_to_file
 
 
 class TestE2EHappyPath:
-    """Полный раундтрип для каждого поддержанного формата."""
+    """Full roundtrip for every supported format."""
 
     def test_png_text_roundtrip(self, png_medium: Path, payload_tiny: Path, tmp_path: Path):
-        """PNG + текстовый payload: hide -> extract -> точное совпадение байт."""
+        """PNG + text payload: hide -> extract -> exact byte match."""
         service = StegoService()
         output = tmp_path / "stego.png"
 
@@ -55,7 +55,7 @@ class TestE2EHappyPath:
         assert_bytes_equal_to_file(extract_resp.output_path.read_bytes(), payload_tiny)
 
     def test_wav_pdf_roundtrip(self, wav_carrier: Path, payload_pdf: Path, tmp_path: Path):
-        """WAV + PDF payload: hide -- extract -- точное совпадение байт."""
+        """WAV + PDF payload: hide -- extract -- exact byte match."""
         service = StegoService()
         output = tmp_path / "stego.wav"
 
@@ -79,7 +79,7 @@ class TestE2EHappyPath:
         assert_bytes_equal_to_file(extract_resp.output_path.read_bytes(), payload_pdf)
 
     def test_jpeg_text_roundtrip(self, jpeg_carrier: Path, payload_tiny: Path, tmp_path: Path):
-        """JPEG + текстовый payload: hide -- extract -- diff == 0."""
+        """JPEG + text payload: hide -- extract -- diff == 0."""
         service = StegoService()
         output = tmp_path / "stego.jpg"
 
@@ -103,7 +103,7 @@ class TestE2EHappyPath:
         assert_bytes_equal_to_file(extract_resp.output_path.read_bytes(), payload_tiny)
 
     def test_png_with_visual_metrics(self, png_medium: Path, payload_tiny: Path, tmp_path: Path):
-        """PNG hide с compute_visual_metrics=True: response должен содержать ssim."""
+        """PNG hide with compute_visual_metrics=True: the response must contain ssim."""
         service = StegoService()
         hide_req = StegoTaskRequest(
             carrier_path=png_medium,
@@ -121,10 +121,10 @@ class TestE2EHappyPath:
 
 
 class TestE2EMetrics:
-    """Проверка метрик в response.metrics."""
+    """Checks of metrics in response.metrics."""
 
     def test_png_psnr_above_threshold(self, png_medium: Path, payload_tiny: Path, tmp_path: Path):
-        """PNG: PSNR должен быть >= 40 dB."""
+        """PNG: PSNR must be >= 40 dB."""
         service = StegoService()
         req = StegoTaskRequest(
             carrier_path=png_medium,
@@ -140,7 +140,7 @@ class TestE2EMetrics:
     def test_metrics_contain_required_keys(
         self, png_medium: Path, payload_tiny: Path, tmp_path: Path
     ):
-        """Минимальный набор ключей в metrics для PNG."""
+        """Minimum set of keys in metrics for PNG."""
         service = StegoService()
         req = StegoTaskRequest(
             carrier_path=png_medium,
@@ -156,12 +156,12 @@ class TestE2EMetrics:
 
 
 class TestE2EEdgeCases:
-    """Граничные условия: переполнение, неверный пароль, битые файлы, анти-конверсия."""
+    """Boundary conditions: overflow, wrong password, corrupted files, anti-conversion."""
 
     def test_capacity_overflow_raises_compatibility(
         self, png_small: Path, payload_pdf: Path, tmp_path: Path
     ):
-        """small.png (64x64) не вмещает PDF в несколько КБ -- CompatibilityError."""
+        """small.png (64x64) cannot hold a PDF of several KB -- CompatibilityError."""
         service = StegoService()
         req = StegoTaskRequest(
             carrier_path=png_small,
@@ -177,7 +177,7 @@ class TestE2EEdgeCases:
     def test_wrong_password_on_extract_raises(
         self, png_medium: Path, payload_tiny: Path, tmp_path: Path
     ):
-        """Hide с одним паролем -- extract с другим -- InvalidFrameError или InvalidPasswordError."""
+        """Hide with one password -- extract with another -- InvalidFrameError or InvalidPasswordError."""
         service = StegoService()
 
         hide_resp = service.hide_data(StegoTaskRequest(
@@ -199,7 +199,7 @@ class TestE2EEdgeCases:
     def test_corrupted_carrier_fails_gracefully(
         self, corrupted_png: Path, tmp_path: Path
     ):
-        """Битый PNG при попытке extract -- исключение, не сегфолт."""
+        """A corrupted PNG on extract -- an exception, not a segfault."""
         service = StegoService()
         req = StegoTaskRequest(
             carrier_path=corrupted_png,
@@ -208,15 +208,15 @@ class TestE2EEdgeCases:
             password="any",
         )
         with pytest.raises(Exception):
-            # Принимаем любое исключение — PIL может бросить разные вещи,
-            # InvalidFrameError, или OSError при load. Важно — не падение
-            # интерпретатора.
+            # Any exception is accepted — PIL may raise different things,
+            # InvalidFrameError, or OSError on load. What matters is that
+            # the interpreter does not crash.
             service.extract_data(req)
 
     def test_empty_password_allowed(
         self, png_medium: Path, payload_tiny: Path, tmp_path: Path
     ):
-        """Пустой пароль допустим."""
+        """An empty password is allowed."""
         service = StegoService()
         req = StegoTaskRequest(
             carrier_path=png_medium,
@@ -230,12 +230,12 @@ class TestE2EEdgeCases:
     def test_anticonversion_png_to_wav_blocked(
         self, png_medium: Path, payload_tiny: Path, tmp_path: Path
     ):
-        """PNG carrier -- попытка сохранить с расширением .wav -- CompatibilityError."""
+        """PNG carrier -- an attempt to save with a .wav extension -- CompatibilityError."""
         service = StegoService()
         req = StegoTaskRequest(
             carrier_path=png_medium,
             payload_path=payload_tiny,
-            output_path=tmp_path / "stego.wav",  # неправильное расширение
+            output_path=tmp_path / "stego.wav",  # wrong extension
             password="pwd",
         )
         with pytest.raises(CompatibilityError) as exc_info:
@@ -245,14 +245,14 @@ class TestE2EEdgeCases:
     def test_payload_format_detection_known_format(
         self, png_medium: Path, tmp_path: Path
     ):
-        """Спрятать минимальный валидный WAV внутри PNG - extract - output должен получить расширение .wav.
+        """Hide a minimal valid WAV inside a PNG - extract - the output must get a .wav extension.
 
-        Создаём WAV вручную с минимальным заголовком, чтобы гарантированно
-        уложиться в capacity png_medium и при этом дать FormatIdentifier опознать формат по magic-bytes.
+        We build the WAV by hand with a minimal header so it is guaranteed
+        to fit in the png_medium capacity and still let FormatIdentifier recognize the format by magic bytes.
         """
         minimal_wav = (
             b"RIFF"
-            b"\x24\x00\x00\x00"   # размер файла - 8
+            b"\x24\x00\x00\x00"   # file size minus 8
             b"WAVE"
             b"fmt "
             b"\x10\x00\x00\x00"   # PCM header size
@@ -289,10 +289,10 @@ class TestE2EEdgeCases:
     def test_payload_format_unknown_falls_back_to_bin(
         self, png_medium: Path, payload_pdf: Path, tmp_path: Path
     ):
-        """Спрятать PDF (неподдержанный формат) -- extract -- расширение .bin.
+        """Hide a PDF (unsupported format) -- extract -- extension .bin.
 
-        PDF не входит в список форматов, по которым FormatIdentifier определяет magic bytes только PNG/WAV/JPEG. 
-        Backend дефолтит неопознанные форматы в .bin - это документированное поведение.
+        PDF is not in the list of formats FormatIdentifier detects by magic bytes; that list is only PNG/WAV/JPEG.
+        The backend defaults unrecognized formats to .bin — this is documented behavior.
         """
         service = StegoService()
         hide_resp = service.hide_data(StegoTaskRequest(
@@ -315,12 +315,12 @@ class TestE2EEdgeCases:
 
 
 class TestE2ECapacityReport:
-    """analyze_capacity должен корректно предсказывать fit/no-fit."""
+    """analyze_capacity must correctly predict fit/no-fit."""
 
     def test_capacity_fits_for_small_payload(
         self, png_medium: Path, payload_tiny: Path, tmp_path: Path
     ):
-        """tiny payload в medium PNG -> fits=True."""
+        """A tiny payload in a medium PNG -> fits=True."""
         service = StegoService()
         req = StegoTaskRequest(
             carrier_path=png_medium,
@@ -335,7 +335,7 @@ class TestE2ECapacityReport:
     def test_capacity_no_fit_warns_before_hide(
         self, png_small: Path, payload_pdf: Path, tmp_path: Path
     ):
-        """PDF в маленький PNG -- fits=False, hide_data ещё не вызывался."""
+        """A PDF in a small PNG -- fits=False, hide_data has not been called yet."""
         service = StegoService()
         req = StegoTaskRequest(
             carrier_path=png_small,

@@ -1,16 +1,16 @@
-"""Микро-бенчмарк edge-detection в SmartSpreader для подтверждения
-гипотезы из таски #25.2.
+"""Micro-benchmark of edge detection in SmartSpreader to confirm
+the hypothesis from task #25.2.
 
-Проверяет:
-1. Какой % сэмплов попадает в edge-pool для WAV vs PNG.
-2. Сколько времени занимает _build_edge_pool отдельно для каждого формата.
-3. Стоит ли edge-detection для WAV вообще того (по факту это no-op,
-   если фильтрует <5% сэмплов).
+Checks:
+1. What percent of samples land in the edge pool for WAV vs PNG.
+2. How long _build_edge_pool takes separately for each format.
+3. Whether edge detection for WAV is worth it at all (in practice it is a no-op
+   if it filters out <5% of samples).
 
-Отчёт пишется в tests/scripts/baseline_wav.md, чтобы не перетирать
-основной baseline.md из 25.1.
+The report is written to tests/scripts/baseline_wav.md so it does not overwrite
+the main baseline.md from 25.1.
 
-Запуск из корня проекта:
+Run from the project root:
     python tests/scripts/profile_edge_pool.py
 """
 from __future__ import annotations
@@ -35,12 +35,12 @@ from stegambit.core.formats.jpeg import JpegFormat  # noqa: E402
 from stegambit.core.stego.spreader import SmartSpreader  # noqa: E402
 
 
-N_ITERATIONS = 20  # больше прогонов на _build_edge_pool, операция дешёвая.
+N_ITERATIONS = 20  # more runs of _build_edge_pool; the operation is cheap.
 ARTIFACTS = PROJECT_ROOT / "tests" / "artifacts"
 REPORT_PATH = Path(__file__).resolve().parent / "baseline_wav.md"
 
 
-# === Генерация синтетических носителей ===
+# === Synthetic carrier generation ===
 def make_noise_png(path: Path, target_kb: int = 2048) -> None:
     target_bytes = target_kb * 1024
     side = int((target_bytes / 1.05) ** 0.5)
@@ -56,30 +56,30 @@ def make_noise_wav(path: Path, duration_sec: float = 20.0, sr: int = 44100) -> N
 
 
 def make_quiet_wav(path: Path, duration_sec: float = 20.0, sr: int = 44100) -> None:
-    """Тихая синусоида - худший случай для гипотезы (мало шума -> малый
-    градиент -> может реально что-то отфильтроваться). Контрольный кейс.
+    """A quiet sine — the worst case for the hypothesis (little noise -> a small
+    gradient -> something may actually get filtered). Control case.
     """
     t = np.linspace(0, duration_sec, int(sr * duration_sec), endpoint=False)
-    # Тихая (амплитуда ~500) синусоида 440Hz + небольшой белый шум.
+    # Quiet (amplitude ~500) 440 Hz sine plus a little white noise.
     rng = np.random.default_rng(seed=42)
     samples = (500 * np.sin(2 * np.pi * 440 * t)
                + rng.integers(-10, 10, size=t.size)).astype(np.int16)
     wavfile.write(path, sr, samples)
 
 
-# === Измерения ===
+# === Measurements ===
 def measure_edge_pool(container: np.ndarray, n: int = N_ITERATIONS) -> dict:
-    """Замеряет % отфильтрованных позиций и время _build_edge_pool."""
+    """Measures the percent of filtered positions and the time of _build_edge_pool."""
     spreader = SmartSpreader()
     total = container.size
 
-    # Один прогон для статистики % отсева.
+    # One run for the rejection-percentage statistic.
     pool = spreader._build_edge_pool(container)
     pool_size = int(pool.size)
     pct_in = pool_size / total * 100.0 if total > 0 else 0.0
     pct_filtered_out = 100.0 - pct_in
 
-    # N прогонов для замера времени.
+    # N runs to measure time.
     times_ms: list[float] = []
     for _ in range(n):
         t0 = time.perf_counter()
@@ -97,7 +97,7 @@ def measure_edge_pool(container: np.ndarray, n: int = N_ITERATIONS) -> dict:
     }
 
 
-# === Отчёт ===
+# === Report ===
 def render_report(env: dict, results: list[dict]) -> str:
     lines = [
         "# Edge-detection Analysis для WAV (Подтаска #25.2)",
@@ -139,7 +139,7 @@ def render_report(env: dict, results: list[dict]) -> str:
             f"| {r['time_median_ms']:.2f} |"
         )
 
-    # Авто-вердикт по гипотезе.
+    # Automatic verdict on the hypothesis.
     wav_results = [r for r in results if "WAV" in r["name"]]
     png_results = [r for r in results if "PNG" in r["name"]]
 
@@ -210,14 +210,14 @@ def main() -> None:
 
         jpeg_real = ARTIFACTS / "carriers" / "photo.jpg"
 
-        # Загрузка каждого через свой format-handler -> ndarray.
+        # Load each one through its format handler -> ndarray.
         png_arr = PngFormat().load(png_2mb)
         wav_noise_arr = WavFormat().load(wav_noise)
         wav_quiet_arr = WavFormat().load(wav_quiet)
 
-        # PNG из реального фото для контраста с синтетикой.
-        # Берём photo.jpg, декодируем в RGB ndarray вручную, чтобы не
-        # завязываться на JPEG-pipeline (там DCT-контейнер, не ndarray).
+        # A PNG from a real photo, for contrast with the synthetic data.
+        # Take photo.jpg and decode it to an RGB ndarray by hand so we do
+        # not depend on the JPEG pipeline (that yields a DCT container, not an ndarray).
         photo_arr = np.array(Image.open(jpeg_real).convert("RGB"), dtype=np.uint8)
 
         cases = [

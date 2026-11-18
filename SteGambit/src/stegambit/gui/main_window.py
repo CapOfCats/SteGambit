@@ -31,8 +31,8 @@ _CAPACITY_ERROR_MARKERS = (
 
 class MainWindow(QMainWindow):
     """
-    Главное окно SteGambit.
-    Содержит: TabWidget ENCODE/DECODE, MetricsPanel collapsed/expanded, StatusBar, кнопку Settings.
+    Main SteGambit window.
+    Contains: ENCODE/DECODE TabWidget, collapsed/expanded MetricsPanel, StatusBar, Settings button.
     """
     _CAPACITY_ERROR_MARKERS = (
         "Недостаточно ёмкости",
@@ -59,14 +59,14 @@ class MainWindow(QMainWindow):
 
 
     def _build_ui(self):
-        # Центральный виджет
+        # Central widget
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Шапка с кнопкой Settings
+        # Header with the Settings button
         header = self._build_header()
         layout.addWidget(header)
 
@@ -81,7 +81,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.decode_panel, "[ DECODE ]")
         layout.addWidget(self.tabs, stretch=1)
 
-        # MetricsPanel (скрыта до завершения операции)
+        # MetricsPanel (hidden until the operation finishes)
         self.metrics_panel = MetricsPanel()
         layout.addWidget(self.metrics_panel)
 
@@ -129,7 +129,7 @@ class MainWindow(QMainWindow):
             self._set_status("Settings saved.", level="ok")
     
     def _open_log_file(self):
-        """Открывает stegambit.log в системном просмотрщике."""
+        """Opens stegambit.log in the system viewer."""
         log_path = get_log_path()
         if log_path is None or not log_path.exists():
             QMessageBox.information(
@@ -150,7 +150,7 @@ class MainWindow(QMainWindow):
         )
 
     def _on_check_compatibility(self):
-        """Проверка совместимости через StegoService.analyze_capacity()."""
+        """Compatibility check via StegoService.analyze_capacity()."""
         cover = self.encode_panel.get_cover_path()
         payload = self.encode_panel.get_payload_path()
 
@@ -222,7 +222,7 @@ class MainWindow(QMainWindow):
             )
 
     def _on_hide_requested(self):
-        """Открывает EncodeDialog для ввода пароля и пути."""
+        """Opens EncodeDialog for the password and path."""
         cover = self.encode_panel.get_cover_path()
         if not cover:
             self._set_status("Cover не выбран.", level="warning")
@@ -259,7 +259,7 @@ class MainWindow(QMainWindow):
             self._progress_timer = None
 
     def _on_encode_confirmed(self, result: EncodeDialogResult):
-        """Запуск Encode через StegoWorker."""
+        """Starts Encode via StegoWorker."""
         if self._is_worker_running():
             self._set_status("Операция уже выполняется. Подождите...")
             return
@@ -292,9 +292,9 @@ class MainWindow(QMainWindow):
         self._worker.start()
     
     def _apply_status_color(self, status: QualityStatus):
-        """Транслирует QualityStatus → level и перекрашивает статус-бар.
+        """Maps QualityStatus → level and recolors the status bar.
     
-        Текст не меняет — только цвет. Вызывается после _set_status("Done...").
+        Does not change the text — only the color. Called after _set_status("Done...").
         """
         level_map = {
             QualityStatus.OK:      "OK",
@@ -307,9 +307,9 @@ class MainWindow(QMainWindow):
 
 
     def _on_encode_finished(self, response):
-        """Обработчик результата Encode.
+        """Encode result handler.
 
-        MetricsData собирается здесь и передаётся в MetricsPanel.
+        MetricsData is assembled here and passed to MetricsPanel.
         """
         self._stop_fake_progress()
         self._set_controls_enabled(True)
@@ -369,7 +369,7 @@ class MainWindow(QMainWindow):
         self._set_status(f"Done. {' | '.join(parts)}", level="ok")
 
     def _on_extract_requested(self):
-        """Запуск Decode через StegoWorker."""
+        """Starts Decode via StegoWorker."""
         if self._is_worker_running():
             self._set_status("Операция уже выполняется. Подождите...")
             return
@@ -428,7 +428,7 @@ class MainWindow(QMainWindow):
     
     
     def _on_worker_error(self, message: str):
-        """Обработчик неожиданных ошибок воркера."""
+        """Handler for unexpected worker errors."""
         self.encode_panel.reset_progress()
         self._set_controls_enabled(True)
         QMessageBox.critical(
@@ -444,18 +444,18 @@ class MainWindow(QMainWindow):
         try:
             return self._worker.isRunning()
         except RuntimeError:
-            # Если объект воркера убили, удаляем ссылку и больше никогда в жизни к ней не возвращаемся!
+            # If the worker object was destroyed, drop the reference and never touch it again.
             self._worker = None
             return False
     
     def _clear_worker_reference(self):
-        """Обнуляет ссылку на воркер - это для сигналов finished/error.
-        Здесь только исключительно флаш Python-ссылки.
+        """Clears the worker reference for finished/error signals.
+        Only the Python reference is flushed here.
         """
         self._worker = None
 
     def _create_worker(self, request: StegoTaskRequest, mode: str) -> StegoWorker:
-        """Подушка безопасности для удаленного потока, исключаем RuntimeError посреди работы."""
+        """Safety net for a deleted thread; avoid RuntimeError mid-operation."""
         worker = StegoWorker(request, mode=mode)
         worker.finished.connect(worker.deleteLater)
         worker.finished.connect(self._clear_worker_reference)
@@ -469,12 +469,12 @@ class MainWindow(QMainWindow):
         self.decode_panel.btn_extract.setEnabled(enabled)
 
     def _is_capacity_error(self, message: str) -> bool:
-        """Определяет, является ли сообщение ошибкой нехватки ёмкости."""
+        """Returns whether the message is an insufficient-capacity error."""
         return any(marker in message for marker in self._CAPACITY_ERROR_MARKERS)
     
 
     def _show_capacity_error_dialog(self, message: str):
-        """Показывает попап с деталями ошибки ёмкости и советом."""
+        """Shows a popup with capacity-error details and advice."""
         dlg = QMessageBox(self)
         dlg.setWindowTitle("SteGambit — Capacity Error")
         dlg.setIcon(QMessageBox.Icon.Warning)
@@ -492,7 +492,7 @@ class MainWindow(QMainWindow):
         dlg.exec()
     
     def _show_decode_error_dialog(self, message: str):
-        """Показывает попап с понятной ошибкой при decode."""
+        """Shows a popup with a clear decode error."""
         dlg = QMessageBox(self)
         dlg.setWindowTitle("SteGambit — Не удалось извлечь данные")
         dlg.setIcon(QMessageBox.Icon.Warning)
@@ -503,10 +503,10 @@ class MainWindow(QMainWindow):
 
 
     def _set_status(self, message: str, level: str = "idle"):
-        """Обновляет статус-бар с цветовым кодированием.
+        """Updates the status bar with color coding.
 
         Args:
-            message: текст сообщения.
+            message: message text.
             level:   "idle" | "ok" | "warning" | "error"
         """
         style = STATUS_STYLES.get(level, STATUS_STYLES["idle"])
@@ -517,15 +517,15 @@ class MainWindow(QMainWindow):
 
 
     def show_metrics(self, data):
-        """Планируется для AsyncWorker по завершении операции."""
+        """Planned for AsyncWorker when the operation finishes."""
         self.metrics_panel.show_results(data)
         self._set_status(
             f"Processing complete. | Time Elapsed: {data.time_sec:.2f}s | Version AlphaCentavra"
         )
 
     def closeEvent(self, event):
-        """Корректно завершает работу: ждёт окончания воркера перед закрытием."""
+        """Shuts down cleanly: waits for the worker before closing."""
         if self._is_worker_running():
             self._set_status("Waiting for current operation to finish...")
-            self._worker.wait(3000)  # таймаут пока, мб оставлю
+            self._worker.wait(3000)  # timeout for now; might keep it
         super().closeEvent(event)

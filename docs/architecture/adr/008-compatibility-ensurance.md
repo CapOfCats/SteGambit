@@ -1,35 +1,35 @@
-# ADR 008: Модель многопоточности и изоляция графического интерфейса
+# ADR 008: Threading Model and Graphical Interface Isolation
 
-**Дата:** 2026-05-07
-**Статус:** Утверждено
-**Контекст:** Реализация отзывчивого пользовательского интерфейса на базе `PyQt6` в условиях ресурсоемких математических и криптографических вычислений.
+**Date:** 2026-05-07
+**Status:** Approved
+**Context:** Building a responsive user interface on `PyQt6` under resource-heavy mathematical and cryptographic computation.
 
-## 1. Проблематика
-Алгоритмы стеганографии (особенно DCT) и агрессивные параметры генерации крипто-ключей PBKDF2 на 480 000 итераций из ADR 006 создают значительную вычислительную нагрузку. При синхронном вызове `StegoService` из главного потока приложения, операционная система блокирует отрисовку интерфейса. Это приводит к зависанию приложения - состоянию "Not Responding", невозможности отменить операцию и отсутствию обратной связи с пользователем, интерфейс "залипает".
+## 1. Problem
+Steganography algorithms (especially DCT) and the aggressive PBKDF2 key-generation parameters of 480 000 iterations from ADR 006 create a significant computational load. A synchronous call to `StegoService` from the application's main thread causes the operating system to block interface painting. The application freezes into a "Not Responding" state: the operation cannot be cancelled, there is no user feedback, and the interface locks up.
 
-## 2. Архитектурное решение
+## 2. Architectural Decision
 
-Для обеспечения непрерывной отзывчивости интерфейса принимается паттерн **Background Worker Thread**.
+To keep the interface continuously responsive, the **Background Worker Thread** pattern is adopted.
 
-1.  **Отказ от `asyncio` и стандартного `threading`:** Так как приложение строится на базе паттернов событийно-ориентированного фреймворка `PyQt6`, использование стандартного питоновского `threading.Thread` или асинхронности `asyncio` может привести к Data Races при попытке взаимодействия с C++ объектами Qt.
-2.  **Утвержденный базис:** В качестве базового класса для фоновых вычислений утверждается эксклюзивное использование `PyQt6.QtCore.QThread`.
-3.  **Имплементация:** Слой `async_worker.py` содержит классы `StegoEncoderWorker` и `StegoDecoderWorker`.
+1.  **Reject `asyncio` and the standard `threading` module:** The application is built on the event-driven patterns of `PyQt6`. Using the standard Python `threading.Thread` or `asyncio` can cause data races when interacting with Qt C++ objects.
+2.  **Approved basis:** `PyQt6.QtCore.QThread` is the exclusive base class for background computation.
+3.  **Implementation:** The `async_worker.py` layer contains the classes `StegoEncoderWorker` and `StegoDecoderWorker`.
 
-## 3. Контракт межпоточного взаимодействия
+## 3. Cross-Thread Communication Contract
 
-Самая критическая точка отказа в многопоточном GUI — попытка из фонового потока напрямую изменить состояние виджетов (например, `self.label.setText()`). Это строго запрещено.
+The most critical failure point in a multithreaded GUI is a background thread changing widget state directly (for example, `self.label.setText()`). That is strictly forbidden.
 
-Вводится железобетонный контракт коммуникации:
-*   **Изоляция:** Рабочий поток не имеет никаких ссылок на главное окно (`MainWindow`) или любые элементы UI.
-*   **Связь через Signals & Slots:** Потоки общаются ИСКЛЮЧИТЕЛЬНО через механизм генерации событий. 
-*   **Иммутабельность:** Передача данных между потоками осуществляется только через "замороженные" DTO из контракта ADR 002 (например, передача `StegoResponse` через сигнал). Консистентность памяти гарантируется неизменяемостью (`@dataclass(frozen=True)`).
+A rigid communication contract is introduced:
+*   **Isolation:** The worker thread holds no references to the main window (`MainWindow`) or any UI elements.
+*   **Signals & Slots:** Threads communicate exclusively through the event-generation mechanism.
+*   **Immutability:** Data crosses threads only through frozen DTOs from the ADR 002 contract (for example, passing `StegoResponse` through a signal). Memory consistency is guaranteed by immutability (`@dataclass(frozen=True)`).
 
-## 4. Жизненный цикл потока (На примере Encode)
-1.  **Подготовка (Main Thread):** Пользователь нажимает "HIDE DATA". Главный поток собирает данные из UI, формирует замороженный DTO объект `StegoTaskRequest`.
-2.  **Инициализация (Main Thread):** Создается инстанс `StegoEncoderWorker(request)`. Главный поток подписывается на сигналы воркера (`.finished`, `.error`, `.progress`).
-3.  **Вычисления (Background Thread):** Воркер вызывает бизнес-логику `StegoService.hide_data()`. Нагрузка падает на отдельное ядро процессора. GUI остается полностью отзывчивым.
-4.  **Завершение (Cross-Boundary):** По результату, фоновый поток генерирует сигнал `finished.emit(response)`.
-5.  **Рендеринг (Main Thread):** Главный цикл (Event Loop) Qt перехватывает сигнал и безопасно отрисовывает обновленные метрики из пришедшего `response`.
+## 4. Thread Lifecycle (Encode Example)
+1.  **Preparation (Main Thread):** The user clicks "HIDE DATA". The main thread collects data from the UI and builds a frozen `StegoTaskRequest` DTO.
+2.  **Initialization (Main Thread):** A `StegoEncoderWorker(request)` instance is created. The main thread subscribes to the worker signals (`.finished`, `.error`, `.progress`).
+3.  **Computation (Background Thread):** The worker calls the business logic `StegoService.hide_data()`. The load falls on a separate CPU core. The GUI stays fully responsive.
+4.  **Completion (Cross-Boundary):** On completion, the background thread emits `finished.emit(response)`.
+5.  **Rendering (Main Thread):** Qt's main event loop receives the signal and safely renders the updated metrics from the incoming `response`.
 
-## 5. Вывод
-Данная Threading-модель гарантирует отсутствие состояний гонки (Data Races), исключает "зависание" окна программы и сохраняет слой бизнес-логики (`core` и `services`) абсолютно независимым от применяемого GUI-фреймворка (принцип Defense-in-Depth).
+## 5. Conclusion
+This threading model guarantees the absence of data races, prevents the application window from freezing, and keeps the business-logic layer (`core` and `services`) fully independent of the GUI framework in use (Defense-in-Depth).

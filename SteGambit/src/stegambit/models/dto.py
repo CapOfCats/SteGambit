@@ -1,7 +1,7 @@
-"""DTO-слой SteGambit.
+"""SteGambit DTO layer.
 
-Все DTO неизменяемы (frozen=True) и валидируют входные данные
-через __post_init__. Архитектурное обоснование: см. ADR 009.
+All DTOs are immutable (frozen=True) and validate inputs
+via __post_init__. Architectural rationale: see ADR 009.
 """
 from dataclasses import dataclass
 from enum import Enum
@@ -10,10 +10,10 @@ from typing import Optional, Dict, Any
 
 
 class QualityStatus(str, Enum):
-    """Триггер качества операции. Используется UI для цветовой индикации результата:
+    """Operation quality trigger. Used by the UI for color indication of the result:
         OK       (PSNR >= 40 dB, deviation <= 30%).
-        WARNING  (30 <= PSNR < 40, потенциально обнаружимо).
-        ANOMALY  (PSNR < 30 или deviation > 30%).
+        WARNING  (30 <= PSNR < 40, potentially detectable).
+        ANOMALY  (PSNR < 30 or deviation > 30%).
     """
     OK = "OK"
     WARNING = "WARNING"
@@ -22,22 +22,22 @@ class QualityStatus(str, Enum):
 
 @dataclass(frozen=True)
 class StegoTaskRequest:
-    """Запрос на сокрытие или извлечение данных.
+    """Request to hide or extract data.
 
-    Поля валидируются в __post_init__:
-        * carrier_path - должен существовать и быть файлом.
-        * payload_path - должен существовать и быть файлом.
-        * output_path  - родительская директория должна существовать.
-        * password     - допустима пустая строка.
-        * compute_visual_metrics - флаг для опционального расчёта SSIM
-          (тяжёлая метрика, ~1.5s на 2MB PNG). По умолчанию выключен.
+    Fields are validated in __post_init__:
+        * carrier_path - must exist and be a file.
+        * payload_path - must exist and be a file.
+        * output_path  - the parent directory must exist.
+        * password     - an empty string is allowed.
+        * compute_visual_metrics - flag for optional SSIM computation
+          (heavy metric, ~1.5s on a 2MB PNG). Off by default.
 
-    Пути нормализуются через Path(...).resolve().
+    Paths are normalized via Path(...).resolve().
 
     Raises:
-        FileNotFoundError: Если output_path.parent отсутствуют.
-        ValueError:        Если carrier/payload не являются файлами.
-        TypeError:         Если password не строка.
+        FileNotFoundError: If output_path.parent is missing.
+        ValueError:        If carrier/payload are not files.
+        TypeError:         If password is not a string.
     """
     carrier_path: Path
     payload_path: Path
@@ -76,18 +76,18 @@ class StegoTaskRequest:
 
 @dataclass(frozen=True)
 class StegoResponse:
-    """Результат операции."""
+    """Operation result."""
     success: bool
     output_path: Optional[Path] = None
-    metrics: Optional[Dict[str, Any]] = None  # PSNR, время и т.д.
+    metrics: Optional[Dict[str, Any]] = None  # PSNR, time, etc.
     error: Optional[str] = None
 
 
 @dataclass(frozen=True)
 class CapacityReport:
-    """Отчёт о пропускной способности контейнера для предварительной валидации.
+    """Container capacity report for preliminary validation.
 
-    Возвращается StegoService.analyze_capacity() до фактической операции сокрытия.
+    Returned by StegoService.analyze_capacity() before the actual hiding operation.
     """
     fits: bool
     format: str

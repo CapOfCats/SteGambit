@@ -1,43 +1,43 @@
-# ADR 004: Умный бинарный протокол (Flexible Payload DTO)
+# ADR 004: Smart Binary Protocol (Flexible Payload DTO)
 
-**Дата:** 2026-03-24
-**Статус:** Утверждено (Ревизия 2)
-**Контекст:** Формирование структуры полезной нагрузки (Payload) до этапа внедрения в контейнер. Протокол должен поддерживать опциональное сжатие и архитектуру "Двойного дна" (Plausible Deniability).
+**Date:** 2026-03-24
+**Status:** Approved (Revision 2)
+**Context:** Defining the payload structure before embedding into the carrier. The protocol must support optional compression and a "plausible deniability" architecture.
 
-## 1. Проблематика
-Контейнер должен уметь достоверно отвечать на вопросы: 
-- Пароль верен? (Защита от чтения шума)
-- Данные были предварительно сжаты? 
-- Является ли этот секрет "Обманкой" (Decoy) или основным секретом?
+## 1. Problem
+The carrier must be able to answer reliably:
+- Is the password correct? (protection against reading noise)
+- Were the data compressed beforehand?
+- Is this secret a decoy or the primary secret?
 
-## 2. Адаптивный Pipeline подготовки данных
-Перед вызовом `embed()`, данные проходят следующий пайплайн:
-1. **Анализ энтропии (Опционально):** Если файл поддается сжатию (текст/JSON), применяется алгоритм `zlib` (level=9). В противном случае сжатие пропускается.
-2. **Шифрование:** Нагрузка шифруется через `AES-256-GCM`.
-3. **Упаковка (Header):** Сборка 41-байтового заголовка.
+## 2. Adaptive Data-Preparation Pipeline
+Before `embed()` is called, data goes through the following pipeline:
+1. **Entropy analysis (optional):** If the file compresses well (text/JSON), `zlib` (level=9) is applied. Otherwise compression is skipped.
+2. **Encryption:** The payload is encrypted with `AES-256-GCM`.
+3. **Packing (header):** Assemble a 41-byte header.
 
-## 3. Структура DTO (Header = 41 байт)
-Любые внедряемые данные обязаны оборачиваться в этот фрейм:
+## 3. DTO Structure (Header = 41 bytes)
+Any embedded data must be wrapped in this frame:
 
-| Блок | Размер | Описание |
+| Block | Size | Description |
 | :--- | :--- | :--- |
-| `MAGIC` | 4 байта | Сигнатура SteGambit (например, `b'SGB1'`). |
-| `FLAGS` | 1 байт | Битовая маска конфигурации. |
-| `NONCE` | 12 байт | Вектор инициализации (IV) для AES-GCM. |
-| `LENGTH`| 8 байт | Истинный размер полезной нагрузки (int64). |
-| `MAC`   | 16 байт | Тег аутентификации (AES-GCM Auth Tag). |
-| `DATA`  | N байт | Шифротекст. |
+| `MAGIC` | 4 bytes | SteGambit signature (for example, `b'SGB1'`). |
+| `FLAGS` | 1 byte | Configuration bit mask. |
+| `NONCE` | 12 bytes | Initialization vector (IV) for AES-GCM. |
+| `LENGTH`| 8 bytes | True payload size (int64). |
+| `MAC`   | 16 bytes | Authentication tag (AES-GCM auth tag). |
+| `DATA`  | N bytes | Ciphertext. |
 
-**Структура байта FLAGS (Битовые маски):**
-- `0x01` (Бит 0): **COMPRESSED** -> Применено сжатие Zlib (требуется распаковка при извлечении).
-- `0x02` (Бит 1): **IS_DECOY** -> (Задел для фичи Двойного Дна) Флаг указывает, что это ложная нагрузка. 
-- `0x04`...`0x80`: Зарезервированы для будущих версий (например, флаг режима EOF).
+**FLAGS byte layout (bit masks):**
+- `0x01` (bit 0): **COMPRESSED** -> Zlib compression was applied (decompression is required on extraction).
+- `0x02` (bit 1): **IS_DECOY** -> (placeholder for the plausible-deniability feature) The flag marks this as a decoy payload.
+- `0x04`...`0x80`: Reserved for future versions (for example, an EOF-mode flag).
 
-## 4. Контракт для Extract (Процесс извлечения)
-1. Вычислить сид Spreader'а -> получить координаты.
-2. Прочитать ровно **41 байт** по координатам.
-3. Проверить `MAGIC`. Если нет совпадения == неверный пароль или пустой контейнер.
-4. Проверить бит `COMPRESSED` в `FLAGS`.
-5. Прочитать `LENGTH` байт шифротекста.
-6. Вызвать дешифрацию (в случае неверного пароля/повреждения MAC tag отстрелит ошибку).
-7. Если `COMPRESSED == 1`, прогнать через `zlib.decompress()`.
+## 4. Extract Contract (Extraction Process)
+1. Compute the Spreader seed -> obtain coordinates.
+2. Read exactly **41 bytes** at those coordinates.
+3. Check `MAGIC`. No match means a wrong password or an empty carrier.
+4. Check the `COMPRESSED` bit in `FLAGS`.
+5. Read `LENGTH` bytes of ciphertext.
+6. Call decryption (a wrong password or a damaged MAC tag raises an error).
+7. If `COMPRESSED == 1`, run `zlib.decompress()`.

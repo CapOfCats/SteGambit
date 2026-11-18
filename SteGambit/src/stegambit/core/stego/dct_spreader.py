@@ -1,12 +1,12 @@
-"""DctSpreader - content-aware spreader для DCT-домена.
+"""DctSpreader — content-aware spreader for the DCT domain.
 
-В отличие от SmartSpreader LSB, здесь нет edge-detection — пул формируется фильтром среднечастотных коэффициентов внутр
-DctProcessor. Spreader отвечает только за:
-    1. Получение пула через DctProcessor.get_embeddable_positions.
-    2. Детерминированное перемешивание seeded-RNG от пароля.
-    3. Возврат среза нужной длины.
+Unlike LSB SmartSpreader, there is no edge detection here — the pool is formed by the mid-frequency coefficient filter inside
+DctProcessor. The spreader is responsible only for:
+    1. Obtaining the pool via DctProcessor.get_embeddable_positions.
+    2. Deterministic shuffling with a password-seeded RNG.
+    3. Returning a slice of the required length.
 
-Архитектурный принцип: сервисный слой не должен знать про seeding - это деталь spreaderа.
+Architectural principle: the service layer must not know about seeding — that is a spreader detail.
 """
 from typing import Any, Optional
 
@@ -17,10 +17,10 @@ from stegambit.core.stego.strategies import DctProcessor
 
 
 class DctSpreader:
-    """Spreader для JSteg-пайплайна.
+    """Spreader for the JSteg pipeline.
 
-    Симметричен SmartSpreader по контракту (generate_coords +
-    get_max_capacity_bits), но без edge-detection.
+    Symmetric with SmartSpreader by contract (generate_coords +
+    get_max_capacity_bits), but without edge detection.
     """
 
     def __init__(self, dct_processor: Optional[DctProcessor] = None) -> None:
@@ -32,11 +32,11 @@ class DctSpreader:
         payload_bits_len: int,
         password_seed: str,
     ) -> np.ndarray:
-        """Возвращает детерминированную перестановку координат пула
-        длины payload_bits_len.
+        """Returns a deterministic permutation of pool coordinates
+        of length payload_bits_len.
 
         Raises:
-            ValueError: если пула недостаточно для требуемого числа бит.
+            ValueError: if the pool is too small for the required number of bits.
         """
         pool = self._dct.get_embeddable_positions(container)
         if pool.size < payload_bits_len:
@@ -48,9 +48,9 @@ class DctSpreader:
         return shuffled[:payload_bits_len]
 
     def get_max_capacity_bits(self, container: Any) -> int:
-        """Максимальная ёмкость DCT-носителя в битах.
+        """Maximum DCT carrier capacity in bits.
 
-        Делегирует подсчёт DctProcessor (фильтр среднечастотных AC).
+        Delegates the count to DctProcessor (mid-frequency AC filter).
         """
         pool = self._dct.get_embeddable_positions(container)
         return int(pool.size)

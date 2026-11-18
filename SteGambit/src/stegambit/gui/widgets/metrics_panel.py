@@ -14,9 +14,9 @@ from typing import Optional
 from stegambit.models.dto import QualityStatus
 
 _STATUS_COLOR: dict[QualityStatus, str] = {
-    QualityStatus.OK:      "#4aaa4a",   # ГРИН
-    QualityStatus.WARNING: "#aaaa4a",   # ЕЛЛОУ
-    QualityStatus.ANOMALY: "#aa4a4a",   # РЭД
+    QualityStatus.OK:      "#4aaa4a",   # GREEN
+    QualityStatus.WARNING: "#aaaa4a",   # YELLOW
+    QualityStatus.ANOMALY: "#aa4a4a",   # RED
 }
 
 _STATUS_LABEL: dict[QualityStatus, str] = {
@@ -32,7 +32,7 @@ _SUMMARY_TEXT: dict[QualityStatus, str] = {
 }
 
 def _render_waveform(path: Path, w: int, h: int, color: str = "#4aaa4a") -> Optional[QPixmap]:
-    """WAV → waveform QPixmap. Только stdlib wave + numpy."""
+    """WAV → waveform QPixmap. stdlib wave + numpy only."""
     try:
         with wave.open(str(path), "rb") as wf:
             n_channels = wf.getnchannels()
@@ -45,7 +45,7 @@ def _render_waveform(path: Path, w: int, h: int, color: str = "#4aaa4a") -> Opti
         samples   = np.frombuffer(raw, dtype=dtype)
 
         if n_channels > 1:
-            samples = samples[::n_channels]  # стерео → моно
+            samples = samples[::n_channels]  # stereo → mono
 
         max_val = np.iinfo(dtype).max
         samples = samples.astype(np.float32) / max_val
@@ -71,7 +71,7 @@ def _render_waveform(path: Path, w: int, h: int, color: str = "#4aaa4a") -> Opti
             x = int(i * x_step)
             painter.drawLine(x, int(mid), x, int(mid - s * mid * 0.9))
 
-        # центральная ось
+        # center axis
         painter.setPen(QPen(QColor("#3a5a3a")))
         painter.drawLine(0, int(mid), w, int(mid))
         painter.end()
@@ -81,7 +81,7 @@ def _render_waveform(path: Path, w: int, h: int, color: str = "#4aaa4a") -> Opti
         return None
 
 class ZoomablePreview(QWidget):
-    """Превью одного файла: изображение / WAV-waveform + ползунок зума."""
+    """Preview of one file: image / WAV waveform + zoom slider."""
 
     _ZOOM_MIN  = 50
     _ZOOM_MAX  = 300
@@ -164,7 +164,7 @@ class ZoomablePreview(QWidget):
 
 
     def load(self, path: Optional[Path], info_text: str = ""):
-        """Загрузить файл. Авто-определение: изображение / WAV / заглушка."""
+        """Load a file. Auto-detect: image / WAV / placeholder."""
         self.lbl_info.setText(info_text)
         self._raw_px   = None
         self._zoom_pct = 100
@@ -257,7 +257,7 @@ class MetricsData:
     result_size_mb: float
     quality_status: QualityStatus = QualityStatus.OK
 
-    # PSNR/SSIM: None для DCT-пайплайна
+    # PSNR/SSIM: None for the DCT pipeline
     psnr: Optional[float] = None
     ssim: Optional[float] = None
 
@@ -271,10 +271,10 @@ class MetricsData:
 
 class MetricsPanel(QWidget):
     """
-    Панель метрик — collapsed / expanded.
+    Metrics panel — collapsed / expanded.
 
-    Collapsed: одна строка с ключевыми показателями + кнопка [▼ Expand].
-    Expanded : полное окно с превью до/после и детальными метриками.
+    Collapsed: one row of key figures + [▼ Expand] button.
+    Expanded: full view with before/after previews and detailed metrics.
     """
 
     def __init__(self, parent=None):
@@ -353,7 +353,7 @@ class MetricsPanel(QWidget):
         preview_outer.setContentsMargins(8, 8, 8, 8)
         preview_outer.setSpacing(0)
 
-        preview_outer.addStretch(1)                          # ← прижимаем к центру
+        preview_outer.addStretch(1)                          # ← pin to center
 
         self._preview_orig = ZoomablePreview("[Original]")
         preview_outer.addWidget(self._preview_orig)
@@ -367,7 +367,7 @@ class MetricsPanel(QWidget):
         self._preview_result = ZoomablePreview("[Stego Result]")
         preview_outer.addWidget(self._preview_result)
 
-        preview_outer.addStretch(1)                          # ← прижимаем к центру
+        preview_outer.addStretch(1)                          # ← pin to center
 
         preview_outer.addSpacing(32)
         summary_col = QVBoxLayout()
@@ -423,7 +423,7 @@ class MetricsPanel(QWidget):
         dto_grid = QGridLayout(dto_group)
         self.lbl_format_id  = QLabel("Datatype Magic Bytes: —")
         self.lbl_integrity  = QLabel("Data Integrity Check: —")
-        self.lbl_quality_badge = QLabel("Quality Gate: —")     # новое поле #13
+        self.lbl_quality_badge = QLabel("Quality Gate: —")     # new field #13
         dto_grid.addWidget(self.lbl_format_id, 0, 0)
         dto_grid.addWidget(self.lbl_integrity, 1, 0)
         dto_grid.addWidget(self.lbl_quality_badge, 2, 0)
@@ -451,16 +451,16 @@ class MetricsPanel(QWidget):
 
     @staticmethod
     def _status_color(status: QualityStatus) -> str:
-        """Единственная точка маппинга статус → цвет.
-        Убрана старая _psnr_color(), теперь цвет берётся из бэкендового QualityStatus.
+        """Single mapping point from status → color.
+        The old _psnr_color() was removed; color now comes from backend QualityStatus.
         """
         return _STATUS_COLOR.get(status, "#888888")
 
 
     def show_results(self, data: MetricsData):
-        """Принять данные и отобразить панель.
+        """Accept data and display the panel.
 
-        Цветовая индикация полностью управляется data.quality_status.
+        Color indication is fully driven by data.quality_status.
         """
         self._data = data
         color = self._status_color(data.quality_status)
@@ -468,7 +468,7 @@ class MetricsPanel(QWidget):
         self.lbl_status.setText(_STATUS_LABEL.get(data.quality_status, "[ Operation Complete ]"))
         self.lbl_status.setStyleSheet(f"color: {color}; font-weight: bold;")
 
-        # PSNR — может быть None
+        # PSNR — may be None
         if data.psnr is not None:
             self.lbl_psnr.setText(
                 f'PSNR: <span style="color:{color}">{data.psnr:.1f} dB</span>'
@@ -478,7 +478,7 @@ class MetricsPanel(QWidget):
             self.lbl_psnr.setText("PSNR: N/A (DCT)")
             self.lbl_psnr.setTextFormat(Qt.TextFormat.PlainText)
 
-        # SSIM — может быть None
+        # SSIM — may be None
         if data.ssim is not None:
             self.lbl_ssim.setText(
                 f'SSIM: <span style="color:{color}">{data.ssim:.4f}</span>'

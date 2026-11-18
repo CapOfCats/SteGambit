@@ -7,18 +7,18 @@ from pathlib import Path
 
 
 class FileSelectionPanel(QWidget):
-    """Панель выбора файлов для вкладки ENCODE.
+    """File selection panel for the ENCODE tab.
     
-    После выбора cover-файла синхронно определяет формат через FormatIdentifier
-    и отображает algorithm label (LSB/DCT).
-    Импорт FormatIdentifier делается внутри метода, чтобы не тащить
-    зависимость бэка на уровень модуля виджета.
+    After a cover file is chosen, synchronously detects the format via FormatIdentifier
+    and shows the algorithm label (LSB/DCT).
+    FormatIdentifier is imported inside the method so the backend
+    dependency is not pulled in at widget-module level.
     """
 
     cover_changed = pyqtSignal(Path)
     payload_changed = pyqtSignal(Path)
 
-    # Описание алгоритма по формату - в человекочитаемом виде
+    # Algorithm description by format, in human-readable form
     _ALGO_LABELS = {
         "PNG":  "LSB  (Least Significant Bit — spatial domain)",
         "WAV":  "LSB  (Least Significant Bit — temporal domain)",
@@ -34,7 +34,7 @@ class FileSelectionPanel(QWidget):
         layout = QGridLayout(group)
         layout.setColumnStretch(1, 1)
 
-        # Cover-файл
+        # Cover file
         layout.addWidget(QLabel("Cover File (Image/Audio):"), 0, 0)
         self.edit_cover = QLineEdit()
         self.edit_cover.setPlaceholderText("Select container file...")
@@ -43,14 +43,14 @@ class FileSelectionPanel(QWidget):
         btn_cover.clicked.connect(self._browse_cover)
         layout.addWidget(btn_cover, 0, 2)
 
-        # Algorithm label — появляется после выбора cover
+        # Algorithm label — appears after the cover is selected
         self.lbl_algorithm = QLabel("Algorithm: —")
         self.lbl_algorithm.setStyleSheet(
             "color: #888888; font-size: 12px; padding-left: 4px;"
         )
         layout.addWidget(self.lbl_algorithm, 1, 1, 1, 2)
 
-        # Payload-файл
+        # Payload file
         layout.addWidget(QLabel("Payload File (Data to Hide):"), 2, 0)
         self.edit_payload = QLineEdit()
         self.edit_payload.setPlaceholderText("Select file to hide...")
@@ -85,11 +85,11 @@ class FileSelectionPanel(QWidget):
 
 
     def _update_algorithm_label(self, path: Path) -> None:
-        """Синхронно определяет формат по magic bytes и обновляет label.
+        """Synchronously detects the format from magic bytes and updates the label.
 
-        Импорт бэка локальный — изолируем зависимость от core в одном месте.
-        Если FormatIdentifier бросает ValueError (неизвестный формат) —
-        показываем предупреждение прямо в label, не крашим UI.
+        The backend import is local — the core dependency stays in one place.
+        If FormatIdentifier raises ValueError (unknown format) —
+        show a warning in the label instead of crashing the UI.
         """
         try:
             from stegambit.core.common.format_id import FormatIdentifier
@@ -105,14 +105,14 @@ class FileSelectionPanel(QWidget):
                 "color: #aa6a2a; font-size: 12px; padding-left: 4px;"
             )
         except Exception:
-            # Бэк недоступен (например, в изолированных тестах UI)
+            # Backend unavailable (for example, in isolated UI tests)
             self.lbl_algorithm.setText("Algorithm: — (backend unavailable)")
             self.lbl_algorithm.setStyleSheet(
                 "color: #888888; font-size: 12px; padding-left: 4px;"
             )
 
     def reset_algorithm_label(self) -> None:
-        """Сброс label в исходное состояние (нужен при очистке формы)."""
+        """Resets the label to its initial state (needed when the form is cleared)."""
         self.lbl_algorithm.setText("Algorithm: —")
         self.lbl_algorithm.setStyleSheet(
             "color: #888888; font-size: 12px; padding-left: 4px;"
@@ -128,7 +128,7 @@ class FileSelectionPanel(QWidget):
         return Path(t) if t else None
 
     def get_detected_format(self) -> str | None:
-        """Возвращает последний определённый формат (PNG/WAV/JPEG) или None."""
+        """Returns the last detected format (PNG/WAV/JPEG) or None."""
         text = self.lbl_algorithm.text()
         for fmt in ("PNG", "WAV", "JPEG"):
             if fmt in text:

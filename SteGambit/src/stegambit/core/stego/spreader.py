@@ -5,105 +5,105 @@ from ..base import ISpreader
 from ..common.seeding import derive_rng_from_password
 
 class SmartSpreader(ISpreader):
-    """Content-aware Spreader с Edge Detection.
+    """Content-aware spreader with edge detection.
 
-    Как работает:
-        1. Контейнер -> grayscale (если RGB).
-        2. Градиент через разность соседей (|dx| + |dy|).
-        3. Пул = координаты, где градиент >= искажения.
-        4. Детерминированная перестановка пула через seed от пароля.
+    How it works:
+        1. Container -> grayscale (if RGB).
+        2. Gradient via neighbor differences (|dx| + |dy|).
+        3. Pool = coordinates where the gradient >= the distortion.
+        4. Deterministic permutation of the pool via a seed from the password.
     """
 
-    # Эмпирический порог "шумности" для edge-detection.
+    # Empirical "noisiness" threshold for edge detection.
     #
-    # Подобран для 8-bit изображений (uint8, шкала 0-255): порог 8 ≈ 3%
-    # от диапазона, осмысленно отсеивает гладкие области (небо, заливки).
-    # На реальных фото отсеивает ~85% пикселей (см. profiling/docs/baseline_wav.md).
+    # Tuned for 8-bit images (uint8, scale 0-255): a threshold of 8 is about 3%
+    # of the range and meaningfully filters out smooth regions (sky, flat fills).
+    # On real photos it filters out ~85% of pixels (see profiling/docs/baseline_wav.md).
     #
-    # Для WAV (int16, шкала -32768..+32767) порог 8 = 0.024% от диапазона
-    # и почти ничего не фильтрует на шумных сигналах (>99% сэмплов в пуле).
-    # Это намеренный trade-off: алгоритм остаётся единым для всех форматов,
-    # детерминированный shuffle обеспечивает рассеивание независимо
-    # от качества фильтра. Адаптивный порог отклонён в #25 (ломает
-    # обратную совместимость существующих стего-файлов).
-    GRADIENT_THRESHOLD = 8  # Хардкод эмпирического порога "шумности" пикселя
+    # For WAV (int16, scale -32768..+32767) a threshold of 8 is 0.024% of the range
+    # and filters almost nothing on noisy signals (>99% of samples stay in the pool).
+    # This is an intentional trade-off: the algorithm stays the same for every format,
+    # and the deterministic shuffle provides spreading regardless
+    # of filter quality. An adaptive threshold was rejected in #25 (it breaks
+    # backward compatibility of existing stego files).
+    GRADIENT_THRESHOLD = 8  # Hardcoded empirical pixel "noisiness" threshold
 
     def _to_grayscale_mask(self, container: np.ndarray) -> np.ndarray:
-        """Возвращает 2D-массив (H,W) яркости или исходный 1D для аудио.
-        Нужно для выявления шума, предварительно конвертировав изображение в черно-белое.
-        Для этого используются коэффициенты стандарта ITU-R BT.601"""
-        masked = container & ~np.array(1, dtype=container.dtype) # Это защита от shrinkage, чтобы граничные значения не потерлись в дешифровке
+        """Returns a 2D (H, W) luminance array, or the original 1D array for audio.
+        Needed to detect noise, after first converting the image to black and white.
+        The ITU-R BT.601 standard coefficients are used for that."""
+        masked = container & ~np.array(1, dtype=container.dtype) # Shrinkage protection so boundary values are not wiped out during decryption
         if masked.ndim == 3:
-            return (0.299 * masked[..., 0] + # чувствительность к красному спектру
-                    0.587 * masked[..., 1] + # к зеленому
-                    0.114 * masked[..., 2]).astype(np.int16) # к синему
+            return (0.299 * masked[..., 0] + # sensitivity to the red spectrum
+                    0.587 * masked[..., 1] + # to green
+                    0.114 * masked[..., 2]).astype(np.int16) # to blue
         return masked.astype(np.int16)
 
     def _build_edge_pool(self, container: np.ndarray) -> np.ndarray:
-        """Формирует массив flat-индексов в container.flat, прошедших порог."""
+        """Builds an array of flat indices into container.flat that passed the threshold."""
         gray = self._to_grayscale_mask(container)
 
         if gray.ndim == 2:
-            dx = np.abs(np.diff(gray, axis=1, prepend=gray[:, :1])) # разность соседних пикселей по горизонтали
-            dy = np.abs(np.diff(gray, axis=0, prepend=gray[:1, :])) # аналогично - по Y
+            dx = np.abs(np.diff(gray, axis=1, prepend=gray[:, :1])) # difference of neighboring pixels along the horizontal
+            dy = np.abs(np.diff(gray, axis=0, prepend=gray[:1, :])) # likewise along Y
             edge_map = dx + dy
-            mask_2d = edge_map >= self.GRADIENT_THRESHOLD # итоговая маска для мест, где грандиент больше порога
+            mask_2d = edge_map >= self.GRADIENT_THRESHOLD # final mask of places where the gradient exceeds the threshold
 
             if container.ndim == 3:
-                # Пиксель "шумный" - тогда все его каналы годятся.
+                # The pixel is "noisy", so all of its channels are usable.
                 c = container.shape[2]
                 mask_flat = np.repeat(mask_2d.ravel(), c)
             else:
                 mask_flat = mask_2d.ravel()
         else:
-            # 1D для WAV - тут просто разность с соседом.
+            # 1D for WAV — here it is simply the difference with the neighbor.
             diff = np.abs(np.diff(gray, prepend=gray[:1]))
             mask_flat = diff >= self.GRADIENT_THRESHOLD
 
         return np.flatnonzero(mask_flat).astype(np.int64)
 
     def get_max_capacity_bits(self, container: np.ndarray) -> int:
-        """Возвращает реальную ёмкость пула координат после edge-detection.
+        """Returns the real capacity of the coordinate pool after edge detection.
 
         Args:
-            container: Контейнер (RGB image, audio samples).
+            container: Container (RGB image, audio samples).
 
         Returns:
-            Число позиций, прошедших порог GRADIENT_THRESHOLD.
-            Может быть СУЩЕСТВЕННО меньше container.size: для гладких
-            изображений (заливка одним цветом) может быть близко к нулю.
+            Number of positions that passed GRADIENT_THRESHOLD.
+            Can be SUBSTANTIALLY smaller than container.size: for smooth
+            images (a single-color fill) it can be close to zero.
         """
         return int(self._build_edge_pool(container).size)
 
     def generate_coords(self, container: np.ndarray, payload_bits_len: int,
                         password_seed: str,
                         exclude_coords: Optional[Set[int]] = None) -> np.ndarray:
-        """Генерирует payload_bits_len координат для embed.
+        """Generates payload_bits_len coordinates for embed.
 
-        Алгоритм:
-            1. Построить пул через edge-detection (_build_edge_pool).
-            2. Если задан exclude_coords (decoy-режим) — вычесть их из пула.
-            3. Проверить, что в пуле достаточно мест.
-            4. Детерминированно перемешать пул seed'ом из пароля.
-            5. Вернуть первые payload_bits_len координат.
+        Algorithm:
+            1. Build the pool via edge detection (_build_edge_pool).
+            2. If exclude_coords is set (decoy mode) — subtract them from the pool.
+            3. Check that the pool has enough positions.
+            4. Deterministically shuffle the pool with a seed from the password.
+            5. Return the first payload_bits_len coordinates.
 
         Args:
-            container:        Контейнер-носитель.
-            payload_bits_len: Сколько координат нужно (= размер payload в битах).
-            password_seed:    Пароль для seed-генерации (см. core/common/seeding).
-            exclude_coords:   Координаты, занятые decoy-payload (ADR 004).
-                              Реальный payload должен внедряться в позиции,
-                              отличные от decoy, иначе при extract decoy
-                              мы попадём на чужие биты.
+            container:        Carrier container.
+            payload_bits_len: How many coordinates are needed (= payload size in bits).
+            password_seed:    Password for seed generation (see core/common/seeding).
+            exclude_coords:   Coordinates occupied by the decoy payload (ADR 004).
+                              The real payload must be embedded at positions
+                              different from the decoy; otherwise, on decoy extract,
+                              we would land on someone else's bits.
 
         Returns:
-            1D ndarray длины payload_bits_len с flat-индексами.
+            1D ndarray of length payload_bits_len with flat indices.
 
         Raises:
-            ValueError: Если после фильтрации в пуле меньше координат,
-                        чем требуется для payload_bits_len.
-                        Сообщение содержит расчёт нехватки в байтах
-                        для UI-диалога.
+            ValueError: If, after filtering, the pool has fewer coordinates
+                        than payload_bits_len requires.
+                        The message includes the shortage calculated in bytes
+                        for the UI dialog.
         """
         pool = self._build_edge_pool(container)
 
@@ -121,6 +121,6 @@ class SmartSpreader(ISpreader):
                 f"Возьмите контейнер большего размера или payload меньшего размера."
             )
 
-        rng = derive_rng_from_password(password_seed)  # SHA-256 → seed (см. core/common/seeding)
-        rng.shuffle(pool)  # in-place, без дополнительных аллокаций
+        rng = derive_rng_from_password(password_seed)  # SHA-256 → seed (see core/common/seeding)
+        rng.shuffle(pool)  # in-place, without extra allocations
         return pool[:payload_bits_len]

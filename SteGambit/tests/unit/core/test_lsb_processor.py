@@ -1,8 +1,8 @@
-"""Unit-тесты для LsbProcessor - strategies.py.
+"""Unit tests for LsbProcessor — strategies.py.
 
-Изоляция:
-    Тесты НЕ используют SmartSpreader. Координаты генерируются как
-    np.arange(N) для детерминированности и независимости от другого модуля.
+Isolation:
+    Tests do NOT use SmartSpreader. Coordinates are generated as
+    np.arange(N) for determinism and independence from the other module.
 """
 import numpy as np
 import pytest
@@ -16,11 +16,11 @@ def processor():
 
 
 class TestRoundTrip:
-    """Главный инвариант: extract(embed(c, p, coords), coords, len(p)) == p."""
+    """The main invariant: extract(embed(c, p, coords), coords, len(p)) == p."""
 
     @pytest.mark.parametrize("payload_size", [1, 16, 256, 1024])
     def test_round_trip_various_sizes(self, processor, rng, payload_size):
-        """Эквивалентность - по размеру payload: малый / средний / крупный."""
+        """Equivalence by payload size: small / medium / large."""
         container = rng.integers(0, 256, size=10_000, dtype=np.uint8)
         payload = rng.bytes(payload_size)
         coords = np.arange(payload_size * 8, dtype=np.int64)
@@ -31,7 +31,7 @@ class TestRoundTrip:
         assert recovered == payload
 
     def test_round_trip_on_3d_rgb_array(self, processor, rng):
-        """LSB должен работать на 3D ndarray - RGB изображении."""
+        """LSB must work on a 3D ndarray — an RGB image."""
         container = rng.integers(0, 256, size=(50, 50, 3), dtype=np.uint8)
         payload = b"FFF RGB stego!!111!!ahahah"
         coords = np.arange(len(payload) * 8, dtype=np.int64)
@@ -42,7 +42,7 @@ class TestRoundTrip:
         assert recovered == payload
 
     def test_round_trip_on_int16_audio_like(self, processor, rng):
-        """WAV-семплы - int16."""
+        """WAV samples are int16."""
         container = rng.integers(-32768, 32768, size=5_000, dtype=np.int16)
         payload = b"AudioPayload"
         coords = np.arange(len(payload) * 8, dtype=np.int64)
@@ -54,10 +54,10 @@ class TestRoundTrip:
 
 
 class TestSideEffects:
-    """Неизменность - что embed НЕ должен трогать."""
+    """Immutability — what embed must NOT touch."""
 
     def test_embed_does_not_mutate_original_container(self, processor, rng):
-        """embed возвращает копию, оригинал не меняет."""
+        """embed returns a copy and does not change the original."""
         original = rng.integers(0, 256, size=1_000, dtype=np.uint8)
         backup = original.copy()
         payload = b"test"
@@ -68,9 +68,9 @@ class TestSideEffects:
         np.testing.assert_array_equal(original, backup)
 
     def test_embed_preserves_high_bits(self, processor, rng):
-        """Старшие 7 бит каждого изменённого байта должны остаться нетронутыми."""
+        """The upper 7 bits of every changed byte must stay untouched."""
         container = rng.integers(0, 256, size=1_000, dtype=np.uint8)
-        payload = b"X"  # восьмой бит0чек
+        payload = b"X"  # eight bits
         coords = np.arange(8, dtype=np.int64)
 
         stego = processor.embed(container, payload, coords)
@@ -81,7 +81,7 @@ class TestSideEffects:
         )
 
     def test_embed_does_not_touch_unused_positions(self, processor, rng):
-        """Позиции вне coords должны остаться идентичными."""
+        """Positions outside coords must stay identical."""
         container = rng.integers(0, 256, size=1_000, dtype=np.uint8)
         payload = b"Y"
         coords = np.arange(8, dtype=np.int64)
@@ -96,7 +96,7 @@ class TestSideEffects:
 class TestBoundaries:
 
     def test_empty_payload(self, processor, rng):
-        """Пустой payload - допустим, embed не меняет контейнер."""
+        """An empty payload is allowed; embed does not change the container."""
         container = rng.integers(0, 256, size=100, dtype=np.uint8)
         payload = b""
         coords = np.arange(0, dtype=np.int64)
@@ -105,15 +105,15 @@ class TestBoundaries:
         np.testing.assert_array_equal(container, stego)
 
     def test_extract_zero_length_returns_empty(self, processor, rng):
-        """extract(length=0) - пустой байт на выходе"""
+        """extract(length=0) — empty bytes on output"""
         container = rng.integers(0, 256, size=100, dtype=np.uint8)
         coords = np.arange(0, dtype=np.int64)
         assert processor.extract(container, coords, length=0) == b""
 
     def test_coords_exactly_fit_payload(self, processor, rng):
-        """Граничный кейз: coords.size == payload_bits - это успешное условие."""
+        """Boundary case: coords.size == payload_bits is the success condition."""
         container = rng.integers(0, 256, size=1_000, dtype=np.uint8)
-        payload = b"AB"  # 16 бит
+        payload = b"AB"  # 16 bits
         coords = np.arange(16, dtype=np.int64)
 
         stego = processor.embed(container, payload, coords)
@@ -122,14 +122,14 @@ class TestBoundaries:
     def test_coords_one_short_raises(self, processor, rng):
         """coords.size = payload_bits - 1 -> ValueError."""
         container = rng.integers(0, 256, size=1_000, dtype=np.uint8)
-        payload = b"AB"  # 16 бит
+        payload = b"AB"  # 16 bits
         coords = np.arange(15, dtype=np.int64)
 
         with pytest.raises(ValueError, match="Координат меньше"):
             processor.embed(container, payload, coords)
 
     def test_extract_coords_one_short_raises(self, processor, rng):
-        """Симметричная граница для extract."""
+        """The symmetric boundary for extract."""
         container = rng.integers(0, 256, size=1_000, dtype=np.uint8)
         coords = np.arange(15, dtype=np.int64)
         with pytest.raises(ValueError, match="Координат меньше"):
@@ -137,11 +137,11 @@ class TestBoundaries:
 
 
 class TestUnsupportedFeatures:
-    """Гарды, защищающие незавершённые фичи."""
+    """Guards protecting unfinished features."""
 
     @pytest.mark.parametrize("depth", [0, 2, 3, 8, -1])
     def test_embed_rejects_non_one_lsb_depth(self, processor, rng, depth):
-        """lsb_depth != 1 -> NotImplementedError. Архитектурный гард."""
+        """lsb_depth != 1 -> NotImplementedError. An architectural guard."""
         container = rng.integers(0, 256, size=100, dtype=np.uint8)
         coords = np.arange(8, dtype=np.int64)
         with pytest.raises(NotImplementedError):
@@ -156,7 +156,7 @@ class TestUnsupportedFeatures:
 
 
 class TestDeterminism:
-    """Повторный embed одинаковых данных - идентичный результат."""
+    """A repeated embed of the same data — an identical result."""
 
     def test_embed_is_deterministic(self, processor, rng):
         container = rng.integers(0, 256, size=1_000, dtype=np.uint8)

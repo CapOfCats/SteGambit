@@ -1,17 +1,17 @@
-# ADR 010: Инкапсуляция логики распределения и отвязка Service от Crypto
+# ADR 010: Encapsulating Spreading Logic and Detaching Service from Crypto
 
-**Дата:** 10.06.2026
-**Статус:** Принято
+**Date:** 10.06.2026
+**Status:** Accepted
 
-## Контекст
-В процессе интеграции алгоритмов LSB (с Edge-detection) и DCT (со среднечастотными коэффициентами) логика псевдослучайного перемешивания пула координат (PRNG на базе пароля) "протекла" в фасадный слой (`StegoService`). Возникла асимметрия: для `SmartSpreader` (LSB) ёмкость высчитывалась через объект Spreader, а для DCT `StegoService` обращался напрямую к пулу и функциям `seeding.py`.
+## Context
+While integrating the LSB (with edge detection) and DCT (with mid-frequency coefficients) algorithms, the logic for pseudo-random shuffling of the coordinate pool (password-based PRNG) leaked into the facade layer (`StegoService`). An asymmetry appeared: for `SmartSpreader` (LSB), capacity was computed through the Spreader object, while for DCT `StegoService` accessed the pool and the functions in `seeding.py` directly.
 
-## Решение
-1. Ввести единый полиморфный интерфейс Spreader: `SmartSpreader` для LSB и `DctSpreader` для DCT.
-2. Контракт Spreader включает методы `generate_coords(...)` и `get_max_capacity_bits(...)`.
-3. Сервисный слой обращается исключительно к Spreader абстракции. Оценка `analyze_capacity` полностью делегируется Spreader'ам.
-4. Отказаться от создания избыточных классов-обёрток (`PasswordSeededShuffler`, `EdgeDetector`) в пользу функциональной композиции (использование чистых функций из `seeding.py` и приватных методов внутри Spreader), следуя pythonic-way и принципу YAGNI.
+## Decision
+1. Introduce a single polymorphic Spreader interface: `SmartSpreader` for LSB and `DctSpreader` for DCT.
+2. The Spreader contract includes the methods `generate_coords(...)` and `get_max_capacity_bits(...)`.
+3. The service layer talks only to the Spreader abstraction. The `analyze_capacity` estimate is fully delegated to Spreaders.
+4. Do not introduce redundant wrapper classes (`PasswordSeededShuffler`, `EdgeDetector`). Prefer functional composition (pure functions from `seeding.py` and private methods inside Spreader), following the Pythonic way and YAGNI.
 
-## Последствия
-* **Положительные:** Полное соблюдение SRP. Форматы и алгоритмы больше не смешиваются в фасаде. Устранены ошибки в тестах оценки ёмкости, так как теперь ёмкость DCT тоже считается с учётом логики Spreader.
-* **Отрицательные:** Не обнаружено. Код-база стала чище без излишнего OOP-оверхеда.
+## Consequences
+* **Positive:** Full SRP compliance. Formats and algorithms are no longer mixed in the facade. Capacity-estimate test failures are gone, because DCT capacity is now computed with Spreader logic taken into account.
+* **Negative:** None found. The codebase is cleaner without excess OOP overhead.

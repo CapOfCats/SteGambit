@@ -1,4 +1,4 @@
-"""Общие фикстуры для core-тестов."""
+"""Shared fixtures for core tests."""
 
 import pytest
 import numpy as np

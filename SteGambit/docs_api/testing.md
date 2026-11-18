@@ -1,36 +1,36 @@
-# Тестирование
+# Testing
 
-SteGambit покрыт многоуровневой пирамидой тестов:
+SteGambit is covered by a multi-level test pyramid:
 
-## Запуск всех тестов
+## Running all tests
 
 ```bash
 pytest tests/
 ```
 
-### Unit-тесты
-Изолированные тесты отдельных компонентов: `CryptoEngine`, `SmartSpreader`, `DctProcessor`, `StegoService`, `FormatIdentifier`.
+### Unit tests
+Isolated tests of individual components: `CryptoEngine`, `SmartSpreader`, `DctProcessor`, `StegoService`, `FormatIdentifier`.
 
 ```bash
 pytest tests/unit/ -v
 ```
 
-### Integration-тесты
-Тесты с реальным I/O и полной цепочкой компонентов, проверка совместной работы слоёв.
+### Integration tests
+Tests with real I/O and the full component chain, checking that the layers work together.
 
 ```bash
 pytest tests/integration/ -m integration -v
 ```
 
 ### E2E Smoke
-Полный пайплайн *encode → сохранение на диск → extract* на каждом поддерживаемом формате контейнера. Быстрая проверка работоспособности системы в целом.
+The full pipeline *encode → save to disk → extract* on every supported carrier format. A quick check that the system as a whole works.
 
 ```bash
 pytest tests/e2e/ -v
 ```
 
-### E2E Load (нагрузочные)
-Тяжёлые сценарии на больших медиафайлах (проверка потребления памяти и производительности). Скипаются по умолчанию, чтобы не замедлять CI/CD.
+### E2E Load (load tests)
+Heavy scenarios on large media files (memory use and performance). Skipped by default so they do not slow down CI/CD.
 
 ```bash
 pytest tests/e2e/test_e2e_load.py -m load -v -s

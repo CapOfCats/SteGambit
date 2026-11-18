@@ -1,7 +1,7 @@
-"""Integration-тесты политики "запрет конвертации формата".
+"""Integration tests of the "format conversion forbidden" policy.
 
-Покрывает ADR про несменяемость формата носителя. Stego-output должен сохранять исходный формат носителя.
-Попытка задать output с другим расширением приведет к CompatibilityError ДО embed.
+Covers the ADR about the carrier format being immutable. Stego output must keep the original carrier format.
+Trying to set an output with a different extension leads to CompatibilityError BEFORE embed.
 """
 import pytest
 
@@ -19,25 +19,25 @@ def service():
 
 
 class TestForbiddenConversions:
-    """Decision table: пары (carrier_fmt, output_ext), которые ДОЛЖНЫ падать.
+    """Decision table: pairs (carrier_fmt, output_ext) that MUST fail.
 
-    Техника: таблица решений. Каждая строка - запрещённая комбинация
-    форматов, проверяем что сервис корректно отказывает.
+    Technique: decision table. Each row is a forbidden combination
+    of formats; we check that the service correctly refuses.
     """
 
     @pytest.mark.parametrize(
         "carrier_fixture, forbidden_ext",
         [
-            # PNG-носитель нельзя сохранять в чужие форматы.
+            # A PNG carrier must not be saved into a foreign format.
             ("png_medium", ".jpg"),
             ("png_medium", ".jpeg"),
             ("png_medium", ".wav"),
             ("png_medium", ".bmp"),
-            # JPEG-носитель.
+            # JPEG carrier.
             ("jpeg_carrier", ".png"),
             ("jpeg_carrier", ".wav"),
             ("jpeg_carrier", ".bin"),
-            # WAV-носитель.
+            # WAV carrier.
             ("wav_carrier", ".png"),
             ("wav_carrier", ".mp3"),
             ("wav_carrier", ".jpg"),
@@ -52,9 +52,9 @@ class TestForbiddenConversions:
         self, request, service, carrier_fixture, forbidden_ext,
         payload_tiny, tmp_path,
     ):
-        """Несовпадение carrier-формата и output-расширения -> CompatibilityError.
+        """A mismatch of carrier format and output extension -> CompatibilityError.
 
-        Эквивалентность: все запрещённые расширения - один класс отказа.
+        Equivalence: every forbidden extension is one refusal class.
         """
         carrier = request.getfixturevalue(carrier_fixture)
         stego_path = tmp_path / f"stego{forbidden_ext}"
@@ -67,16 +67,16 @@ class TestForbiddenConversions:
                 password="pwd",
             ))
 
-        # Запрет на конвертацию - файл не должен быть создан.
+        # Conversion is forbidden — the file must not be created.
         assert not stego_path.exists(), (
             "Файл создан, хотя политика запрещает конвертацию формата."
         )
 
 
 class TestAllowedFormats:
-    """Сэнити-блок: положительные кейсы политики должны проходить.
+    """Sanity block: positive cases of the policy must pass.
 
-    Техника: позитивные представители классов эквивалентности из таблицы решений.
+    Technique: positive representatives of the equivalence classes from the decision table.
     """
 
     @pytest.mark.parametrize(
@@ -93,7 +93,7 @@ class TestAllowedFormats:
         self, request, service, carrier_fixture, allowed_ext,
         payload_tiny, tmp_path,
     ):
-        """Совпадение carrier-формата и output-расширения -> embed успешен."""
+        """A match of carrier format and output extension -> embed succeeds."""
         carrier = request.getfixturevalue(carrier_fixture)
         stego_path = tmp_path / f"stego{allowed_ext}"
 
@@ -109,7 +109,7 @@ class TestAllowedFormats:
 
 
 class TestCaseSensitivity:
-    """Поведение при разных регистрах расширения."""
+    """Behavior with different extension casings."""
 
     @pytest.mark.parametrize(
         "ext_variant",
@@ -119,10 +119,10 @@ class TestCaseSensitivity:
     def test_extension_case_insensitive_for_png(
         self, service, png_medium, payload_tiny, tmp_path, ext_variant,
     ):
-        """Расширение должно сравниваться case-insensitive.
+        """The extension must be compared case-insensitively.
 
-        Граничный кейс: пользователь сохраняет в "stego.PNG" из Save Dialog
-        на Windows - должно работать так же, как ".png".
+        Boundary case: the user saves as "stego.PNG" from a Save Dialog
+        on Windows — it must work the same as ".png".
         """
         stego_path = tmp_path / f"stego{ext_variant}"
 

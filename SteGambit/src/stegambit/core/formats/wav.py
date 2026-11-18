@@ -1,8 +1,8 @@
-"""WAV-формат для стеганографии.
+"""WAV format for steganography.
 
-Контейнер сохраняет метаданные при load, чтобы save мог восстановить файл с исходными параметрами.
+The container keeps metadata at load so that save can restore the file with the original parameters.
 
-Без этого моно-файл из стерео-источника превращается в МОНСТРА, еще и с замедлением.
+Without that, a mono file taken from a stereo source turns into a MONSTER, and a slowed-down one at that.
 """
 import wave
 from dataclasses import dataclass, field
@@ -16,15 +16,15 @@ from stegambit.core.exceptions import CorruptedCarrierError
 
 @dataclass
 class WavContainer:
-    """Контейнер для WAV-данных + метадата.
+    """Container for WAV data plus metadata.
 
-    Совместим с ndarray-API через __array__.
+    Compatible with the ndarray API via __array__.
 
-    Атрибуты:
-        samples: 1D-массив int16 PCM семплов.
-        n_channels: Количество каналов (1 = mono, 2 = stereo).
-        sampwidth: Байтов в сэмпле (1, 2, 4).
-        framerate: Частота в герцах (44100, 48000).
+    Attributes:
+        samples: 1D array of int16 PCM samples.
+        n_channels: Number of channels (1 = mono, 2 = stereo).
+        sampwidth: Bytes per sample (1, 2, 4).
+        framerate: Sample rate in hertz (44100, 48000).
     """
     samples: np.ndarray
     n_channels: int
@@ -32,12 +32,12 @@ class WavContainer:
     framerate: int
 
     def __array__(self, dtype=None) -> np.ndarray:
-        """Прозрачное преобразование в ndarray для np.asarray/LSB-процессора."""
+        """Transparent conversion to an ndarray for np.asarray / the LSB processor."""
         return self.samples if dtype is None else self.samples.astype(dtype)
 
     @property
     def size(self) -> int:
-        """Количество элементов в массиве семплов."""
+        """Number of elements in the sample array."""
         return self.samples.size
 
     @property
@@ -49,13 +49,13 @@ class WavContainer:
         return self.samples.dtype
 
     def reshape(self, *args, **kwargs):
-        """Прокси к samples.reshape для совместимости с LSB-процессором."""
+        """Proxy to samples.reshape for compatibility with the LSB processor."""
         return self.samples.reshape(*args, **kwargs)
     
     def copy(self) -> "WavContainer":
-        """Возвращает копию контейнера с независимым массивом семплов.
+        """Returns a copy of the container with an independent sample array.
 
-        Нужен для LsbProcessor.embed который копирует перед модификацией, чтобы не трогать исходник.
+        Needed for LsbProcessor.embed, which copies before modification so the original is left untouched.
         """
         return WavContainer(
             samples=self.samples.copy(),
@@ -66,22 +66,22 @@ class WavContainer:
 
 
 class WavFormat:
-    """Загружалка/сохранялка WAV с сохранением метадаты."""
+    """WAV loader/saver that preserves metadata."""
 
     magic = b"RIFF"
 
     def load(self, path: Path) -> WavContainer:
-        """Читает WAV и возвращает WavContainer с метаданными.
+        """Reads a WAV and returns a WavContainer with metadata.
 
         Args:
-            path: Путь к файлу.
+            path: Path to the file.
 
         Returns:
-            WavContainer с 1D-массивом int16 семплов и параметрами файла.
+            WavContainer with a 1D int16 sample array and the file parameters.
 
         Raises:
-            FileNotFoundError: Если файл не существует.
-            CorruptedCarrierError: Если файл повреждён или не является WAV.
+            FileNotFoundError: If the file does not exist.
+            CorruptedCarrierError: If the file is corrupt or is not a WAV.
         """
         if not path.exists():
             raise FileNotFoundError(f"WAV-файл не найден: {path}")
@@ -114,13 +114,13 @@ class WavFormat:
         )
 
     def save(self, container: WavContainer | np.ndarray, path: Path) -> None:
-        """Сохраняет WAV с сохранением исходных метаданных.
+        """Saves a WAV while preserving the original metadata.
 
-        Принимает либо WavContainer (предпочтительно), либо голый ndarray.
+        Accepts either a WavContainer (preferred) or a bare ndarray.
 
         Args:
-            container: WavContainer с семплами и метаданными или ndarray.
-            path: Путь для записи.
+            container: WavContainer with samples and metadata, or an ndarray.
+            path: Path to write to.
         """
         if isinstance(container, WavContainer):
             samples = container.samples
@@ -128,7 +128,7 @@ class WavFormat:
             sampwidth = container.sampwidth
             framerate = container.framerate
         else:
-            # Fallback для совместимости со легаси кодом и тестами
+            # Fallback for compatibility with legacy code and tests
             samples = np.asarray(container)
             n_channels = 1
             sampwidth = 2

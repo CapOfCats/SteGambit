@@ -1,28 +1,28 @@
-"""Утилиты детерминированного seeding для стегоалгоритмов.
+"""Deterministic seeding utilities for stego algorithms.
 
-Все алгоритмы spreading как LSB через SmartSpreader, так и DCT через PasswordShuffler
-используют SHA-256 → 8 bytes → seed_int для воспроизводимости при extract.
+Every spreading algorithm, both LSB via SmartSpreader and DCT via PasswordShuffler,
+uses SHA-256 → 8 bytes → seed_int so that extract stays reproducible.
 
-Логика вынесена сюда, чтобы избежать дублирования и иметь единую точку изменения seed-схемы.
+The logic lives here to avoid duplication and to keep a single place to change the seed scheme.
 """
 import hashlib
 import numpy as np
 
 
 def derive_rng_from_password(password: str) -> np.random.Generator:
-    """Возвращает детерминированный numpy RNG, заведённый от пароля.
+    """Returns a deterministic numpy RNG seeded from the password.
 
-    Схема:
-        SHA-256 -> первые 8 байт -> big-endian uint64 -> seed.
+    Scheme:
+        SHA-256 -> first 8 bytes -> big-endian uint64 -> seed.
 
-    Тот же пароль на разных машинах даст тот же поток случайных чисел - это критично для воспроизводимости 
-    перестановок пула координат на стороне embed/extract.
+    The same password on different machines yields the same random-number stream — this is critical for reproducibility
+    of coordinate-pool permutations on the embed/extract side.
 
     Args:
-        password: Произвольная строка.
+        password: Arbitrary string.
 
     Returns:
-        numpy.random.Generator, готовый к shuffle() integers()
+        numpy.random.Generator, ready for shuffle() integers()
     """
     digest = hashlib.sha256(password.encode("utf-8")).digest()
     seed_int = int.from_bytes(digest[:8], "big", signed=False)
@@ -30,16 +30,16 @@ def derive_rng_from_password(password: str) -> np.random.Generator:
 
 
 def shuffle_pool_by_password(pool: np.ndarray, password: str) -> np.ndarray:
-    """Детерминированно перемешивает пул координат seed'ом из пароля.
+    """Deterministically shuffles the coordinate pool with a seed from the password.
 
-    Возвращает КОПИЮ - не модифицирует входной массив. Это безопаснее в условиях, когда пул переиспользуется/
+    Returns a COPY — does not modify the input array. This is safer when the pool is reused.
 
     Args:
-        pool:     1D numpy-массив координат.
-        password: Строка-сид.
+        pool:     1D numpy array of coordinates.
+        password: Seed string.
 
     Returns:
-        Перемешанная копия pool.
+        Shuffled copy of pool.
     """
     rng = derive_rng_from_password(password)
     pool_copy = pool.copy()

@@ -1,7 +1,7 @@
-"""Unit-тесты для DctProcessor - strategies.py.
+"""Unit tests for DctProcessor — strategies.py.
 
-Тесты работают с синтетическим JpegContainer.
-Интеграция с jpeglib и round-trip через файл будут в test_jpeg_format.py.
+Tests work with a synthetic JpegContainer.
+Integration with jpeglib and a file round-trip live in test_jpeg_format.py.
 """
 import numpy as np
 import pytest
@@ -17,7 +17,7 @@ def processor():
 
 
 def _make_container(y_array: np.ndarray, with_chroma: bool = True) -> JpegContainer:
-    """Создаёт минимальный JpegContainer для unit-тестов без jpeglib."""
+    """Creates a minimal JpegContainer for unit tests without jpeglib."""
     coef_arrays = [y_array]
     if with_chroma:
         cb = np.zeros_like(y_array)
@@ -33,15 +33,15 @@ def _make_container(y_array: np.ndarray, with_chroma: bool = True) -> JpegContai
 
 
 def _make_y_with_value(blocks_h: int, blocks_w: int, fill: int = 50) -> np.ndarray:
-    """Y-канал shape=(Hb, Wb, 8, 8) с фиксированным значением во всех ячейках."""
+    """Y channel of shape=(Hb, Wb, 8, 8) with a fixed value in every cell."""
     return np.full((blocks_h, blocks_w, 8, 8), fill, dtype=np.int16)
 
 
 class TestGetEmbeddablePositions:
-    """Тесты пула валидных DCT-позиций."""
+    """Tests of the pool of valid DCT positions."""
 
     def test_excludes_dc_coefficient(self, processor):
-        """Позиция (0,0) каждого блока — DC, не должна попадать в пул."""
+        """Position (0,0) of every block is DC and must not enter the pool."""
         y = _make_y_with_value(2, 2, fill=50)
         container = _make_container(y)
         pool = processor.get_embeddable_positions(container)
@@ -51,7 +51,7 @@ class TestGetEmbeddablePositions:
         assert not np.any(np.isin(pool, dc_positions))
 
     def test_excludes_high_frequency_positions(self, processor):
-        """Property: каждая intra-block позиция принадлежит первым 27 ."""
+        """Property: every intra-block position belongs to the first 27."""
         
         y = _make_y_with_value(2, 2, fill=50)
         container = _make_container(y)
@@ -63,7 +63,7 @@ class TestGetEmbeddablePositions:
 
     @pytest.mark.parametrize("excluded_value", [-2, -1, 0, 1])
     def test_excludes_dead_zone_values(self, processor, excluded_value):
-        """Таблица решений: значения {-2, -1, 0, 1} полностью исключаются из пула."""
+        """Decision table: values {-2, -1, 0, 1} are fully excluded from the pool."""
         y = _make_y_with_value(2, 2, fill=excluded_value)
         container = _make_container(y)
         pool = processor.get_embeddable_positions(container)
@@ -71,20 +71,20 @@ class TestGetEmbeddablePositions:
 
     @pytest.mark.parametrize("valid_value", [-10, -3, 2, 5, 100])
     def test_includes_valid_values(self, processor, valid_value):
-        """Таблица решений: значения вне {-2,-1,0,1} попадают в пул."""
+        """Decision table: values outside {-2,-1,0,1} enter the pool."""
         y = _make_y_with_value(2, 2, fill=valid_value)
         container = _make_container(y)
         pool = processor.get_embeddable_positions(container)
         assert pool.size > 0
 
     def test_pool_is_int64(self, processor):
-        """dtype результата - int64."""
+        """The result dtype is int64."""
         y = _make_y_with_value(2, 2, fill=50)
         pool = processor.get_embeddable_positions(_make_container(y))
         assert pool.dtype == np.int64
 
     def test_pool_indices_in_bounds(self, processor):
-        """Все индексы валидны для y.ravel()."""
+        """Every index is valid for y.ravel()."""
         y = _make_y_with_value(2, 2, fill=50)
         container = _make_container(y)
         pool = processor.get_embeddable_positions(container)
@@ -92,13 +92,13 @@ class TestGetEmbeddablePositions:
         assert pool.max() < y.size
 
     def test_pool_has_no_duplicates(self, processor):
-        """Уникальность индексов в пуле."""
+        """Indices in the pool are unique."""
         y = _make_y_with_value(3, 3, fill=50)
         pool = processor.get_embeddable_positions(_make_container(y))
         assert len(np.unique(pool)) == pool.size
 
     def test_ignores_chroma_channels(self, processor):
-        """Cb/Cr не влияют на пул."""
+        """Cb/Cr do not affect the pool."""
         y = _make_y_with_value(2, 2, fill=50)
         c_with_chroma = _make_container(y, with_chroma=True)
         c_without = _make_container(y, with_chroma=False)
@@ -107,7 +107,7 @@ class TestGetEmbeddablePositions:
         np.testing.assert_array_equal(pool_with, pool_without)
 
     def test_dead_zone_filtering_per_position(self, processor):
-        """Таблица решений: смешанные значения - корректная пер-позиционная фильтрация."""
+        """Decision table: mixed values — correct per-position filtering."""
         y = np.full((1, 1, 8, 8), 50, dtype=np.int16)
         y[0, 0, 0, 1] = 0
         y[0, 0, 1, 0] = 1
@@ -120,11 +120,11 @@ class TestGetEmbeddablePositions:
 
 
 class TestRoundTrip:
-    """Главный инвариант: embed - extract восстанавливает payload."""
+    """The main invariant: embed then extract restores the payload."""
 
     @pytest.mark.parametrize("payload_size", [1, 8, 64, 256])
     def test_round_trip_various_sizes(self, processor, rng, payload_size):
-        """Эквивалентность: round-trip на разных размерах payload."""
+        """Equivalence: round-trip at different payload sizes."""
         y = rng.integers(-50, 50, size=(12, 12, 8, 8), dtype=np.int16)
         y[np.isin(y, [-2, -1, 0, 1])] = 10
         container = _make_container(y)
@@ -138,7 +138,7 @@ class TestRoundTrip:
         assert recovered == payload
 
     def test_pool_stable_after_embed(self, processor, rng):
-        """Пул после embed идентичен пулу до embed."""
+        """The pool after embed is identical to the pool before embed."""
         y = rng.integers(-50, 50, size=(4, 4, 8, 8), dtype=np.int16)
         y[np.isin(y, [-2, -1, 0, 1])] = 10
         container = _make_container(y)
@@ -152,17 +152,17 @@ class TestRoundTrip:
 
 
 class TestSideEffects:
-    """Контракты embed по неизменности."""
+    """Embed contracts about what stays unchanged."""
 
     def test_embed_mutates_in_place_and_returns_same_object(self, processor, rng):
-        """embed возвращает тот же JpegContainer (in-place)."""
+        """embed returns the same JpegContainer (in-place)."""
         y = rng.integers(10, 50, size=(2, 2, 8, 8), dtype=np.int16)
         container = _make_container(y)
         result = processor.embed(container, b"X", np.array([1, 2, 3, 4, 5, 6, 7, 8], dtype=np.int64))
         assert result is container
 
     def test_embed_only_modifies_lsb(self, processor, rng):
-        """Для каждой использованной позиции |before - after| <= 1."""
+        """For every used position |before - after| <= 1."""
         y = rng.integers(10, 50, size=(2, 2, 8, 8), dtype=np.int16)
         container = _make_container(y)
         y_before = container.coef_arrays[0].copy()
@@ -179,7 +179,7 @@ class TestSideEffects:
         assert deltas.max() <= 1
 
     def test_embed_preserves_sign(self, processor, rng):
-        """Знак коэффициента не меняется."""
+        """The sign of the coefficient does not change."""
         y = rng.choice([-50, -30, -10, 10, 30, 50], size=(2, 2, 8, 8)).astype(np.int16)
         container = _make_container(y)
         y_before_flat = container.coef_arrays[0].reshape(-1).copy()
@@ -194,7 +194,7 @@ class TestSideEffects:
         np.testing.assert_array_equal(sign_before, sign_after)
 
     def test_embed_does_not_touch_chroma(self, processor, rng):
-        """Cb/Cr остаются нетронутыми."""
+        """Cb/Cr stay untouched."""
         y = rng.integers(10, 50, size=(2, 2, 8, 8), dtype=np.int16)
         container = _make_container(y)
         cb_before = container.coef_arrays[1].copy()
@@ -207,7 +207,7 @@ class TestSideEffects:
         np.testing.assert_array_equal(container.coef_arrays[2], cr_before)
 
     def test_embed_does_not_touch_unused_positions(self, processor, rng):
-        """Коэффициенты вне coords остаются без изменений."""
+        """Coefficients outside coords stay unchanged."""
         y = rng.integers(10, 50, size=(2, 2, 8, 8), dtype=np.int16)
         container = _make_container(y)
         y_before = container.coef_arrays[0].copy()
@@ -225,10 +225,10 @@ class TestSideEffects:
 
 
 class TestBoundaries:
-    """Граничные кейсы по размерам."""
+    """Boundary cases by size."""
 
     def test_empty_payload(self, processor, rng):
-        """Пустой payload - embed не падает и не меняет Y."""
+        """An empty payload — embed does not fail and does not change Y."""
         y = rng.integers(10, 50, size=(2, 2, 8, 8), dtype=np.int16)
         container = _make_container(y)
         y_before = container.coef_arrays[0].copy()
@@ -243,7 +243,7 @@ class TestBoundaries:
         assert processor.extract(container, np.array([], dtype=np.int64), 0) == b""
 
     def test_embed_coords_one_short_raises(self, processor, rng):
-        """Негативный: coords.size = bits - 1 → ValueError."""
+        """Negative: coords.size = bits - 1 → ValueError."""
         y = rng.integers(10, 50, size=(2, 2, 8, 8), dtype=np.int16)
         container = _make_container(y)
         coords = np.arange(15, dtype=np.int64)
@@ -251,7 +251,7 @@ class TestBoundaries:
             processor.embed(container, b"AB", coords)
 
     def test_extract_coords_one_short_raises(self, processor, rng):
-        """Негативный: симметрия для extract."""
+        """Negative: the symmetric case for extract."""
         y = rng.integers(10, 50, size=(2, 2, 8, 8), dtype=np.int16)
         container = _make_container(y)
         coords = np.arange(15, dtype=np.int64)
@@ -260,11 +260,11 @@ class TestBoundaries:
 
 
 class TestUnsupportedFeatures:
-    """Архитектурные гарды."""
+    """Architectural guards."""
 
     @pytest.mark.parametrize("depth", [0, 2, 3, 8])
     def test_embed_rejects_non_one_lsb_depth(self, processor, rng, depth):
-        """Негативный кейз: lsb_depth != 1 → NotImplementedError."""
+        """Negative case: lsb_depth != 1 → NotImplementedError."""
         y = rng.integers(10, 50, size=(2, 2, 8, 8), dtype=np.int16)
         container = _make_container(y)
         coords = np.arange(8, dtype=np.int64)
@@ -273,7 +273,7 @@ class TestUnsupportedFeatures:
 
     @pytest.mark.parametrize("depth", [0, 2, 3, 8])
     def test_extract_rejects_non_one_lsb_depth(self, processor, rng, depth):
-        """Негативный кейз: симметрия для extract."""
+        """Negative case: the symmetric case for extract."""
         y = rng.integers(10, 50, size=(2, 2, 8, 8), dtype=np.int16)
         container = _make_container(y)
         coords = np.arange(8, dtype=np.int64)

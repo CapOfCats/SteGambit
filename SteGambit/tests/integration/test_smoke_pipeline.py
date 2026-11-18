@@ -1,11 +1,11 @@
-"""Smoke-тесты сквозного пайплайна StegoService.
+"""Smoke tests of the end-to-end StegoService pipeline.
 
-По одному тесту на формат — критичный путь "пользователь скрыл и достал".
-Покрывает домены 1, 3, 4, 6, 7 из чек-листа.
+One test per format — the critical path "the user hid and retrieved".
+Covers domains 1, 3, 4, 6, 7 from the checklist.
 
-Если эти тесты зелёные — система работает.
+If these tests are green, the system works.
 
-Полное покрытие edge-cases — в задаче #19 (Unit) и #24 (Integration).
+Full edge-case coverage is in task #19 (Unit) and #24 (Integration).
 """
 from pathlib import Path
 
@@ -20,9 +20,9 @@ from stegambit.core.exceptions import InvalidFrameError
 @pytest.mark.smoke
 @pytest.mark.integration
 def test_smoke_png_round_trip(png_medium, payload_pdf, tmp_path):
-    """PNG: hide PDF → extract → байты PDF совпадают.
+    """PNG: hide PDF → extract → PDF bytes match.
 
-    Покрывает домены: Crypto, LSB, FormatIdentifier (восстановление .pdf),
+    Covers domains: Crypto, LSB, FormatIdentifier (.pdf recovery),
     StegoService, Spreader, PngFormat I/O.
     """
     service = StegoService()
@@ -63,10 +63,10 @@ def test_smoke_png_round_trip(png_medium, payload_pdf, tmp_path):
 @pytest.mark.smoke
 @pytest.mark.integration
 def test_smoke_jpeg_round_trip(jpeg_carrier, payload_zip, tmp_path):
-    """JPEG: hide ZIP → extract → байты ZIP совпадают.
+    """JPEG: hide ZIP → extract → ZIP bytes match.
 
-    Покрывает: DCT-фильтрацию (фикс shrinkage с {-2,-1,0,1}),
-    JpegFormat I/O без re-quantization, sanity-check Y-канала, восстановление расширения .zip.
+    Covers: DCT filtering (the shrinkage fix with {-2,-1,0,1}),
+    JpegFormat I/O without re-quantization, a Y-channel sanity check, recovery of the .zip extension.
     """
     service = StegoService()
     stego_path = tmp_path / "stego.jpg"
@@ -104,11 +104,11 @@ def test_smoke_jpeg_round_trip(jpeg_carrier, payload_zip, tmp_path):
 @pytest.mark.smoke
 @pytest.mark.integration
 def test_smoke_wav_round_trip(wav_carrier, payload_tiny, tmp_path):
-    """WAV: hide tiny.txt → extract → байты совпадают.
+    """WAV: hide tiny.txt → extract → bytes match.
 
-    Покрывает: LSB на 1D-массиве int16, WavFormat I/O, Spreader
-    на аудио-данных. Используем tiny.txt как малый payload —
-    WAV-носители обычно имеют меньшую "шумную" ёмкость, чем PNG.
+    Covers: LSB on a 1D int16 array, WavFormat I/O, Spreader
+    on audio data. We use tiny.txt as a small payload —
+    WAV carriers usually have less "noisy" capacity than PNG.
     """
     service = StegoService()
     stego_path = tmp_path / "stego.wav"
@@ -137,23 +137,23 @@ def test_smoke_wav_round_trip(wav_carrier, payload_tiny, tmp_path):
     extract_response = service.extract_data(extract_request)
 
     assert extract_response.success is True
-    # tiny.txt — текст, FormatIdentifier.identify_bytes его не опознает
-    # как известный формат, поэтому ожидаем дефолтное расширение .bin.
+    # tiny.txt is text; FormatIdentifier.identify_bytes does not recognize it
+    # as a known format, so the default extension .bin is expected.
     extracted_bytes = extract_response.output_path.read_bytes()
     assert extracted_bytes == original_payload_bytes
 
 
 @pytest.mark.smoke
 def test_smoke_anti_conversion_blocks_png_to_jpeg(png_medium, payload_tiny, tmp_path):
-    """Попытка сохранить PNG-источник как JPEG - CompatibilityError.
+    """An attempt to save a PNG source as JPEG — CompatibilityError.
 
-    Покрывает: политику Anti-Conversion (ADR 007).
+    Covers: the anti-conversion policy (ADR 007).
     """
     service = StegoService()
     request = StegoTaskRequest(
         carrier_path=png_medium,
         payload_path=payload_tiny,
-        output_path=tmp_path / "stego.jpeg",  # ← нарушение политики
+        output_path=tmp_path / "stego.jpeg",  # ← policy violation
         password="any",
     )
 
@@ -164,9 +164,9 @@ def test_smoke_anti_conversion_blocks_png_to_jpeg(png_medium, payload_tiny, tmp_
 @pytest.mark.smoke
 @pytest.mark.integration
 def test_smoke_wrong_password_fails_extraction(png_medium, payload_tiny, tmp_path):
-    """Извлечение с неверным паролем - ошибка, файл не создаётся.
+    """Extraction with a wrong password — an error, the file is not created.
 
-    Покрывает: GCM MAC validation + защиту от случайного извлечения.
+    Covers: GCM MAC validation + protection against accidental extraction.
     """
     service = StegoService()
     stego_path = tmp_path / "stego.png"
@@ -193,9 +193,9 @@ def test_smoke_wrong_password_fails_extraction(png_medium, payload_tiny, tmp_pat
 
 @pytest.mark.smoke
 def test_smoke_capacity_overflow_blocks_hide(png_small, payload_pdf, tmp_path):
-    """Маленький PNG + крупный PDF → fits=False.
+    """A small PNG + a large PDF → fits=False.
 
-    Покрывает: analyze_capacity с честной ёмкостью, защиту от создания деградированного файла.
+    Covers: analyze_capacity with an honest capacity, protection against creating a degraded file.
     """
     service = StegoService()
     request = StegoTaskRequest(

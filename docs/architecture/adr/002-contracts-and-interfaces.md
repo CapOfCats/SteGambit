@@ -1,24 +1,24 @@
-# ADR 002: Контракты межслойного взаимодействия и базовые интерфейсы
+# ADR 002: Cross-Layer Contracts and Base Interfaces
 
-**Дата:** 2026-03-23
+**Date:** 2026-03-23
 
-**Статус:** Утверждено
+**Status:** Approved
 
-**Контекст:** Разработка инструмента мультиформатной стеганографии SteGambit.
+**Context:** Development of the multi-format steganography tool SteGambit.
 
-## 1. Проблематика
-Без строгих контрактов слои `gui` и `core` начнут сливаться: графический интерфейс начнет передавать сырые словари или строки, а ядро — выбрасывать неконтролируемые исключения. Для реализации концепции File-in-File защиты необходимы железобетонные структуры передачи данных (DTO) и абстрактные классы (ABC) для паттерна Strategy и Facade.
+## 1. Problem
+Without strict contracts, the `gui` and `core` layers will merge: the graphical interface will start passing raw dictionaries or strings, and the core will raise uncontrolled exceptions. The file-in-file protection concept needs rigid data-transfer structures (DTOs) and abstract classes (ABC) for the Strategy and Facade patterns.
 
 ## 2. DTO (Data Transfer Objects)
-Слой `models/dto.py` содержит только иммутабельные структуры данных (в Python реализуется через `@dataclass(frozen=True)`). Это гарантирует, что ни один промежуточный процесс случайно не изменит пути к файлам или пароль.
+The `models/dto.py` layer contains only immutable data structures (in Python, `@dataclass(frozen=True)`). That guarantees no intermediate process accidentally changes file paths or the password.
 
-*   `StegoTaskRequest`: Запрос от GUI к Сервису на сокрытие.
-*   `ExtractTaskRequest`: Запрос на извлечение.
-*   `StegoResponse`: Универсальный ответ Сервиса для GUI, содержащий метрики (PSNR, время) и статус.
+*   `StegoTaskRequest`: Request from the GUI to the service for embedding.
+*   `ExtractTaskRequest`: Request for extraction.
+*   `StegoResponse`: Universal service response for the GUI, containing metrics (PSNR, time) and status.
 
-## 3. UML Диаграмма Классов (Абстрактные интерфейсы)
+## 3. UML Class Diagram (Abstract Interfaces)
 
-На рисунке Core_UML_Interfaces.png, находящемся в docs/architecture, представлена структура абстрактных классов (ABC) слоя `core` и `services`, формирующая контракт для Backend-разработчика.
+The figure Core_UML_Interfaces.png, located in docs/architecture, shows the abstract-class (ABC) structure of the `core` and `services` layers, which forms the contract for the backend developer.
 
-## 4. Sequence Diagram (Жизненный цикл File-in-File сокрытия)
-Полный пайплайн процесса Data -> Encrypt -> Encode -> Save в парадигме Defense-in-Depth отражен на рисунке File-in-File Lifecycle.png находящемся в docs/architecture.
+## 4. Sequence Diagram (File-in-File Embedding Lifecycle)
+The full Data -> Encrypt -> Encode -> Save pipeline in the Defense-in-Depth paradigm is shown in the figure File-in-File Lifecycle.png located in docs/architecture.

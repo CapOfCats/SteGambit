@@ -1,119 +1,119 @@
-# Ручные сценарии приемочного тестирования (Smoke Test Cases)
+# Manual acceptance scenarios (Smoke Test Cases)
 
-Данный документ содержит атомарные пользовательские сценарии для проверки стабильности критического функционала (Black Box тестирование) перед релизом.
+This document contains atomic user scenarios for checking the stability of critical functionality (black-box testing) before release.
 
 ---
 
-### Сценарий 1: Пространственная стеганография (Внедрение в PNG)
-**Цель:** Проверка сквозного пайплайна LSB для изображений без потерь.
-**Входные данные:** 
-* Cover (контейнер): `image.png` (например, 1920x1080)
-* Payload (секрет): `secret_doc.pdf`
-* Пароль: `TestPass123`
+### Scenario 1: Spatial steganography (embedding in PNG)
+**Goal:** Verify the end-to-end LSB pipeline for lossless images.
+**Inputs:**
+* Cover (carrier): `image.png` (for example, 1920x1080)
+* Payload (secret): `secret_doc.pdf`
+* Password: `TestPass123`
 
-| Шаг | Действие пользователя | Ожидаемый результат (Реакция системы) |
+| Step | User action | Expected result (system response) |
 | :--- | :--- | :--- |
-| **1** | Запустить приложение, перейти на вкладку **[ ENCODE ]**. | Отображается интерфейс сокрытия данных. |
-| **2** | Выбрать файл `image.png` в поле Cover File. | Контроллер распознает Magic Bytes и отображает алгоритм: `LSB`. |
-| **3** | Выбрать файл `secret_doc.pdf` в поле Payload File и нажать "Check Compatibility". | Рассчитывается отчет емкости. Кнопка "HIDE DATA" разблокируется. |
-| **4** | Нажать "HIDE DATA", ввести пароль, выбрать путь `stego_result.png` и запустить процесс. | Генерация файла `stego_result.png`. Аналитика показывает PSNR > 40 dB, статус процесса "OK" (зеленый). |
-| **5** | Перейти на вкладку **[ DECODE ]**, выбрать файл `stego_result.png`, ввести пароль `TestPass123`, нажать "EXTRACT". | Файл успешно извлечен (формат `.pdf` восстановлен автоматически). Документ читается ОС без ошибок. |
+| **1** | Launch the application and open the **[ ENCODE ]** tab. | The data-hiding interface is displayed. |
+| **2** | Select `image.png` in the Cover File field. | The controller recognizes the Magic Bytes and displays the algorithm: `LSB`. |
+| **3** | Select `secret_doc.pdf` in the Payload File field and click "Check Compatibility". | A capacity report is calculated. The "HIDE DATA" button is enabled. |
+| **4** | Click "HIDE DATA", enter the password, choose the path `stego_result.png`, and start the process. | The file `stego_result.png` is generated. Analytics show PSNR > 40 dB and process status "OK" (green). |
+| **5** | Open the **[ DECODE ]** tab, select `stego_result.png`, enter the password `TestPass123`, and click "EXTRACT". | The file is extracted successfully (the `.pdf` extension is restored automatically). The operating system opens the document without errors. |
 
 ---
 
-### Сценарий 2: Частотная стеганография (Внедрение JSteg в JPEG)
-**Цель:** Проверка работоспособности алгоритмов работы с DCT-коэффициентами.
-**Входные данные:** 
+### Scenario 2: Frequency-domain steganography (JSteg embedding in JPEG)
+**Goal:** Verify that the DCT-coefficient algorithms work.
+**Inputs:**
 * Cover: `photo.jpg`
 * Payload: `archive.zip`
-* Пароль: `JpegStego`
+* Password: `JpegStego`
 
-| Шаг | Действие пользователя | Ожидаемый результат (Реакция системы) |
+| Step | User action | Expected result (system response) |
 | :--- | :--- | :--- |
-| **1** | Выбрать Cover-файл `photo.jpg`. | Контроллер отображает алгоритм: `DCT (frequency domain)`. |
-| **2** | Выбрать Payload-файл `archive.zip` и нажать "Check Compatibility". | Система динамически оценивает пулы AC-коэффициентов и одобряет емкость. |
-| **3** | Скрыть данные и сохранить как `stego_photo.jpg`. | Размер итогового `.jpg` файла изменяется незначительно. Визуально артефакты отсутствуют. |
-| **4** | Провести процедуру DECODE с файлом `stego_photo.jpg`. | Система распознает извлеченный блоб и сохраняет его как `.zip`. Архив распаковывается без ошибок целостности. |
+| **1** | Select the cover file `photo.jpg`. | The controller displays the algorithm: `DCT (frequency domain)`. |
+| **2** | Select the payload file `archive.zip` and click "Check Compatibility". | The system dynamically evaluates the AC-coefficient pools and approves the capacity. |
+| **3** | Hide the data and save it as `stego_photo.jpg`. | The size of the resulting `.jpg` file changes only slightly. No visual artifacts are present. |
+| **4** | Run DECODE on `stego_photo.jpg`. | The system recognizes the extracted blob and saves it as `.zip`. The archive unpacks with no integrity errors. |
 
 ---
 
-### Сценарий 3: Аудио-стеганография (Внедрение в WAV)
-**Цель:** Проверка работы с 1D-массивами акустических сэмплов.
-**Входные данные:** 
+### Scenario 3: Audio steganography (embedding in WAV)
+**Goal:** Verify handling of 1D arrays of audio samples.
+**Inputs:**
 * Cover: `music.wav`
 * Payload: `image.jpg`
-* Пароль: `WavePass`
+* Password: `WavePass`
 
-| Шаг | Действие пользователя | Ожидаемый результат (Реакция системы) |
+| Step | User action | Expected result (system response) |
 | :--- | :--- | :--- |
-| **1** | В качестве Cover загрузить `music.wav`, Payload — `image.jpg`. | Определение формата WAV, алгоритм `LSB`. |
-| **2** | Выполнить внедрение данных и проанализировать метрики. | Показатель Deviation (Отклонение размера) строго 0% (учитывая Lossless природу WAV). |
-| **3** | Воспроизвести сгенерированный WAV-файл в любом медиаплеере. | Файл воспроизводится корректно. Звуковые артефакты (скрежет/шум) отсутствуют. |
+| **1** | Load `music.wav` as the cover and `image.jpg` as the payload. | The format is identified as WAV and the algorithm as `LSB`. |
+| **2** | Embed the data and review the metrics. | The Deviation metric (size change) is strictly 0% (because WAV is lossless). |
+| **3** | Play the generated WAV file in any media player. | The file plays correctly. Audible artifacts (crackling or noise) are absent. |
 
 ---
 
-### Сценарий 4: Защита от переполнения емкости (Capacity Overflow)
-**Цель:** Проверка компонента `CapacityReport` на предотвращение разрушения файла.
-**Входные данные:** 
-* Cover: `small_icon.png` (разрешение 64x64)
-* Payload: `large_video.mp4` (файл размером более 10 МБ)
+### Scenario 4: Capacity overflow protection (Capacity Overflow)
+**Goal:** Verify that `CapacityReport` prevents the file from being damaged.
+**Inputs:**
+* Cover: `small_icon.png` (64x64 resolution)
+* Payload: `large_video.mp4` (a file larger than 10 MB)
 
-| Шаг | Действие пользователя | Ожидаемый результат (Реакция системы) |
+| Step | User action | Expected result (system response) |
 | :--- | :--- | :--- |
-| **1** | Загрузить диспропорциональные файлы в `Cover` и `Payload`. | Поля успешно заполняются. |
-| **2** | Нажать кнопку "Check Compatibility". | Отчет показывает нехватку емкости (Utilization > 100%). Текст окрашивается в красный (`TOO LARGE`). |
-| **3** | Попытаться начать процесс сокрытия. | Кнопка "HIDE DATA" заблокирована (нажать невозможно). Предотвращено создание деградированного файла. |
+| **1** | Load the mismatched files into `Cover` and `Payload`. | The fields are filled successfully. |
+| **2** | Click "Check Compatibility". | The report shows insufficient capacity (Utilization > 100%). The text is colored red (`TOO LARGE`). |
+| **3** | Try to start the hiding process. | The "HIDE DATA" button is disabled (it cannot be clicked). A degraded file is not created. |
 
 ---
 
-### Сценарий 5: Работа контроллера "Анти-Конверсия"
-**Цель:** Убедиться, что система перехватывает попытку неправомерной смены расширения.
-**Входные данные:** 
+### Scenario 5: Anti-conversion controller
+**Goal:** Confirm that the system blocks an invalid extension change.
+**Inputs:**
 * Cover: `photo.jpg`
-* Выходной путь: `C:/Output/stego.png` (ошибка пользователя)
+* Output path: `C:/Output/stego.png` (user error)
 
-| Шаг | Действие пользователя | Ожидаемый результат (Реакция системы) |
+| Step | User action | Expected result (system response) |
 | :--- | :--- | :--- |
-| **1** | Выбрать Cover валидного формата (`.jpg`), пройти валидацию емкости. | Кнопка "HIDE" становится активной. |
-| **2** | В диалоге сохранения итогового стего-файла вручную указать расширение `.png`. | Путь принят интерфейсом. |
-| **3** | Нажать "Start Spreading Bits" в диалоговом окне. | Операция прерывается. В логи выводится исключение: `Нарушение анти-конверсии: носитель JPEG, но выходящий формат .png`. Файл не генерируется. |
+| **1** | Select a cover in a valid format (`.jpg`) and pass the capacity check. | The "HIDE" button becomes active. |
+| **2** | In the save dialog for the resulting stego file, manually set the extension to `.png`. | The interface accepts the path. |
+| **3** | Click "Start Spreading Bits" in the dialog. | The operation is aborted. The logs show the exception: `Нарушение анти-конверсии: носитель JPEG, но выходящий формат .png`. No file is generated. |
 
 ---
 
-### Сценарий 6: Ошибка аутентификации (Wrong Password)
-**Цель:** Проверка криптографической защиты (механизм Key Derivation).
-**Входные данные:** 
-* Валидный стего-контейнер `stego.png` (закодирован паролем `MySecret123`).
-* Пароль для проверки: `mysecret123` (ошибка регистра) или `Wrong`.
+### Scenario 6: Authentication failure (Wrong Password)
+**Goal:** Verify cryptographic protection (the key-derivation mechanism).
+**Inputs:**
+* A valid stego carrier `stego.png` (encoded with the password `MySecret123`).
+* Password under test: `mysecret123` (wrong case) or `Wrong`.
 
-| Шаг | Действие пользователя | Ожидаемый результат (Реакция системы) |
+| Step | User action | Expected result (system response) |
 | :--- | :--- | :--- |
-| **1** | Открыть вкладку **[ DECODE ]**, указать файл `stego.png`. | Файл принимается. |
-| **2** | Ввести ошибочный пароль `mysecret123` и нажать "EXTRACT". | В панели логов появляется ошибка из `CryptoEngine` (отсутствие `MAGIC bytes` или ошибка дешифровки). |
-| **3** | Проверить выходную директорию. | Секретный файл НЕ сгенерирован ("битые" или мусорные файлы не сохраняются). |
+| **1** | Open the **[ DECODE ]** tab and select `stego.png`. | The file is accepted. |
+| **2** | Enter the wrong password `mysecret123` and click "EXTRACT". | The log panel shows an error from `CryptoEngine` (missing `MAGIC bytes`, or a decryption error). |
+| **3** | Check the output directory. | The secret file is NOT generated (corrupt or garbage files are not saved). |
 
 ---
 
-### Сценарий 7: Защита целостности данных (GCM MAC-Tag Mismatch)
-**Цель:** Оценка подсистемы AEAD (аутентифицированное шифрование).
-**Входные данные:** 
-* Валидный стего-контейнер `stego_image.png`.
+### Scenario 7: Data-integrity protection (GCM MAC-tag mismatch)
+**Goal:** Evaluate the AEAD subsystem (authenticated encryption).
+**Inputs:**
+* A valid stego carrier `stego_image.png`.
 
-| Шаг | Действие пользователя | Ожидаемый результат (Реакция системы) |
+| Step | User action | Expected result (system response) |
 | :--- | :--- | :--- |
-| **1** | Открыть `stego_image.png` в редакторе (например, MS Paint), изменить цвет одного пикселя кистью, сохранить файл. | Файл сохранен с искажением скрытой payload. |
-| **2** | Загрузить этот графический файл во вкладку **[ DECODE ]**, ввести *верный* пароль. | Инициализируется извлечение. |
-| **3** | Наблюдать за процессом. | Функция `CryptoEngine.decrypt` выбрасывает исключение: аутентификационный тег модифицирован (`InvalidFrame`). Операция отклонена. |
+| **1** | Open `stego_image.png` in an editor (for example, MS Paint), change the color of one pixel with the brush, and save the file. | The file is saved with the hidden payload corrupted. |
+| **2** | Load this image on the **[ DECODE ]** tab and enter the *correct* password. | Extraction starts. |
+| **3** | Watch the process. | `CryptoEngine.decrypt` raises an exception: the authentication tag was modified (`InvalidFrame`). The operation is rejected. |
 
 ---
 
-### Сценарий 8: Обработка "чистых" файлов (Zero-Trust)
-**Цель:** Проверка поведения системы при попытке извлечения данных из обычного медиафайла.
-**Входные данные:** 
-* Любой случайный медиафайл `regular_pic.jpg`, загруженный из интернета.
+### Scenario 8: Handling clean files (Zero-Trust)
+**Goal:** Check system behavior when extraction is attempted on an ordinary media file.
+**Inputs:**
+* Any random media file `regular_pic.jpg` downloaded from the internet.
 
-| Шаг | Действие пользователя | Ожидаемый результат (Реакция системы) |
+| Step | User action | Expected result (system response) |
 | :--- | :--- | :--- |
-| **1** | На вкладке **[ DECODE ]** выбрать загруженный `regular_pic.jpg`. | Файл принимается к обработке. |
-| **2** | Ввести любой пароль и нажать "EXTRACT". | Чтение псевдослучайных битов возвращает энтропийный шум. |
-| **3** | Окончание проверки. | Система не находит сигнатуру безопасности `SGB1` в шуме. Выводится читаемая ошибка: `MAGIC bytes не найдены. Возможно, файл не содержит данных`. Краша UI не происходит. |
+| **1** | On the **[ DECODE ]** tab, select the downloaded `regular_pic.jpg`. | The file is accepted for processing. |
+| **2** | Enter any password and click "EXTRACT". | Reading the pseudorandom bits returns entropy noise. |
+| **3** | Finish the check. | The system does not find the `SGB1` security signature in the noise. A readable error is shown: `MAGIC bytes не найдены. Возможно, файл не содержит данных`. The UI does not crash. |

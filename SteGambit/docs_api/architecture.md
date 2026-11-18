@@ -1,4 +1,4 @@
-SteGambit построен по принципу **Clean Architecture** с чёткой границей между слоями:
+SteGambit follows **Clean Architecture**, with a clear boundary between layers:
 
 ```text
 ┌─────────────────────────────────────────────────────────┐
@@ -10,13 +10,13 @@ SteGambit построен по принципу **Clean Architecture** с чё�
                              ▼
 ┌─────────────────────────────────────────────────────────┐
 │                  Async Layer (QThread)                  │
-│  StegoWorker — изолирует тяжёлые операции от UI-потока  │
+│  StegoWorker — isolates heavy work from the UI thread   │
 └─────────────────────────────────────────────────────────┘
                              │
                              ▼
 ┌─────────────────────────────────────────────────────────┐
 │                 Service Layer (Facade)                  │
-│ StegoService — оркестрация: validate → crypto →         │
+│ StegoService — orchestration: validate → crypto →       │
 │ spread → embed → save → metrics                         │
 └─────────────────────────────────────────────────────────┘
                              │
@@ -35,11 +35,11 @@ SteGambit построен по принципу **Clean Architecture** с чё�
                      └──────────────┘
 ```
 
-GUI **не знает** про `numpy`, `AES` или `DCT-коэффициенты`. Service-слой **не знает** про `QtWidgets`. Связь — через DTO (`StegoTaskRequest` / `StegoResponse`).
+The GUI **knows nothing** about `numpy`, `AES`, or `DCT coefficients`. The service layer **knows nothing** about `QtWidgets`. They communicate through DTOs (`StegoTaskRequest` / `StegoResponse`).
 
-### Криптографический фрейм
+### Cryptographic frame
 
-Перед внедрением payload оборачивается в `CryptoFrame` — самоописываемый бинарный блок:
+Before embedding, the payload is wrapped in a `CryptoFrame` — a self-describing binary block:
 
 ```text
 ┌────────┬───────┬──────────┬───────────┬─────────┬──────────────────────┐
@@ -49,37 +49,37 @@ GUI **не знает** про `numpy`, `AES` или `DCT-коэффициент
   "STGB"   v1.0     random      random    big-end       AES-GCM-256
 ```
 
-- **MAGIC** — сигнатура `STGB`. При extract проверяется первой: если не совпала — либо пароль неверный, либо файл не содержит payload.
-- **SALT** — случайные 128 бит (16 байт). Подаются в PBKDF2 вместе с паролем — гарантирует, что один и тот же пароль на двух разных стего-файлах даёт **разные** AES-ключи.
-- **NONCE** — IV для AES-GCM (12 байт, требование стандарта NIST SP 800-38D).
-- **LENGTH** — длина ciphertext в байтах. Позволяет читать ровно столько бит при extract, не больше.
-- **CIPHERTEXT + GCM-TAG** — зашифрованный payload + 16-байтовый authentication tag. Любое изменение даже одного бита ciphertext'а приводит к ошибке `InvalidTag` при decrypt — это и есть детектор тампера.
+- **MAGIC** — the `STGB` signature. Checked first on extraction: if it does not match, either the password is wrong or the file contains no payload.
+- **SALT** — 128 random bits (16 bytes). Fed into PBKDF2 together with the password, so the same password on two different stego files yields **different** AES keys.
+- **NONCE** — the IV for AES-GCM (12 bytes, as required by NIST SP 800-38D).
+- **LENGTH** — ciphertext length in bytes. Extraction reads exactly that many bits, and no more.
+- **CIPHERTEXT + GCM-TAG** — the encrypted payload plus a 16-byte authentication tag. Changing even one bit of the ciphertext raises `InvalidTag` on decrypt — that is the tamper detector.
 
 ### LSB Spreading (PNG/WAV)
 
-Наивный LSB пишет биты в первые N пикселей подряд — это палится статистическим χ²-тестом за миллисекунды. **SmartSpreader** делает три вещи:
+Naive LSB writes bits into the first N pixels in a row, and a statistical χ²-test detects that in milliseconds. **SmartSpreader** does three things:
 
-1. **Edge detection** — оператор Собеля по grayscale-проекции, отбрасывает гладкие области (где LSB-шум виден глазу).
-2. **Pool pruning** — фильтрует кандидатов: остаются только пиксели с высоким градиентом.
-3. **Password-seeded shuffle** — пул перемешивается перестановкой, сидированной от `SHA-256(password)`. Без пароля координаты невосстановимы.
+1. **Edge detection** — the Sobel operator on the grayscale projection; smooth regions are discarded (that is where LSB noise is visible to the eye).
+2. **Pool pruning** — candidates are filtered down to pixels with a high gradient.
+3. **Password-seeded shuffle** — the pool is shuffled with a permutation seeded from `SHA-256(password)`. Without the password the coordinates cannot be recovered.
 
-Результат: payload разбросан по «шумным» зонам контейнера в детерминированном, но криптографически непредсказуемом порядке.
+The payload ends up scattered across the "noisy" zones of the carrier, in an order that is deterministic but cryptographically unpredictable.
 
 ### DCT Spreading (JPEG)
 
-Для JPEG пространственные пиксели бесполезны — повторное сжатие уничтожит изменения. **DctProcessor** работает с **квантованными DCT-коэффициентами** напрямую (без re-encode):
+For JPEG, spatial pixels are useless: recompression would destroy the changes. **DctProcessor** works on the **quantized DCT coefficients** directly (no re-encode):
 
-1. Через `jpegio` извлекаются `coef_arrays[0]` — Y-канал блоков 8×8.
-2. В каждом блоке отбираются **среднечастотные AC** (zigzag 1..27): DC не трогаем (вызовет «шахматные» артефакты), высокие частоты — почти всегда нули, их модификация сломает Хаффман-сжатие.
-3. Из пула исключаются значения `{-2, -1, 0, 1}` — их LSB-модификация либо меняет знак (сломает декодер), либо обнуляет коэффициент (сломает пул при extract).
-4. Перестановка — та же `password-seeded shuffle`.
+1. `jpegio` extracts `coef_arrays[0]`, the Y channel of the 8×8 blocks.
+2. Each block contributes **mid-frequency AC** coefficients (zigzag 1..27). DC is left untouched (changing it causes "checkerboard" artifacts). High frequencies are almost always zero, and modifying them would break Huffman compression.
+3. The values `{-2, -1, 0, 1}` are excluded from the pool. An LSB change there either flips the sign (which breaks the decoder) or zeroes the coefficient (which breaks the pool on extraction).
+4. The permutation is the same `password-seeded shuffle`.
 
-Получаем JSteg-подобный пайплайн с расширенным фильтром, устойчивый к re-save в большинстве просмотрщиков.
+The result is a JSteg-like pipeline with an extended filter, robust to re-save in most viewers.
 
-### Производительность
+### Performance
 
-- **NumPy-векторизация:** все битовые операции (`unpackbits` / `packbits` / маски `& ~1 | bit`) выполняются над целыми массивами без Python-циклов.
-- **Async UI:** все тяжёлые операции уходят в `StegoWorker(QThread)` — GUI не подмерзает даже на 68 МБ WAV.
-- **Опциональный SSIM:** psychovisual-метрика отключаема в настройках (на 2 МБ PNG экономит ~1.5 с).
+- **NumPy vectorization:** every bitwise operation (`unpackbits` / `packbits` / masks `& ~1 | bit`) runs on whole arrays, with no Python loops.
+- **Async UI:** heavy work goes to `StegoWorker(QThread)`, so the GUI stays responsive even on a 68 MB WAV.
+- **Optional SSIM:** the psychovisual metric can be turned off in settings (saves ~1.5 s on a 2 MB PNG).
 
-Подробные UML/C4-диаграммы и Architectural Decision Records (ADR) доступны в папке `docs/`.
+Detailed UML/C4 diagrams and Architectural Decision Records (ADR) are in the `docs/` folder.

@@ -1,38 +1,38 @@
-"""Иерархия пользовательских исключений SteGambit.
+"""SteGambit custom exception hierarchy.
 
-Все исключения наследуются от StegambitError, что позволяет ловить их одним except на границе UI
+All exceptions inherit from StegambitError, so they can be caught with a single except at the UI boundary
 
-Каждое исключение несёт человекочитаемую ошибку.
+Each exception carries a human-readable error.
 """
 
 
 class StegambitError(Exception):
-    """Базовое исключение приложения. Все доменные ошибки наследуются от него."""
+    """Base application exception. All domain errors inherit from it."""
 
 
 class CompatibilityError(StegambitError):
-    """Формат не поддержан, не хватает ёмкости, конверсия запрещена."""
+    """The format is unsupported, capacity is insufficient, or conversion is forbidden."""
 
 
 class CapacityExceededError(CompatibilityError):
-    """Payload не помещается в контейнер. Специализация CompatibilityError.
+    """The payload does not fit in the container. A specialization of CompatibilityError.
 
-    Зарезервировано на будущее: если захотим отличать "формат не поддержан"
-    от "формат ОК, но мало места" - фронт сможет проверить через isinstance.
+    Reserved for the future: if we want to distinguish "format not supported"
+    from "format is OK, but there is not enough room", the frontend can check via isinstance.
     """
 
 
 class InvalidFrameError(StegambitError):
-    """В контейнере не найдены MAGIC-байты или повреждён header.
+    """MAGIC bytes were not found in the container, or the header is corrupt.
 
-    Скорее всего: пароль неверный, либо файл вообще не содержит данных.
+    Most likely the password is wrong, or the file contains no data at all.
     """
 
 class InvalidPasswordError(InvalidFrameError):
-    """Неверный пароль или повреждённые данные.
+    """Wrong password or corrupt data.
 
-    AES-GCM не может различить "неверный ключ" и "битые данные" - оба дают одинаковый результат: tag mismatch.
+    AES-GCM cannot distinguish a wrong key from corrupt data — both produce the same result: a tag mismatch.
     """
 
 class CorruptedCarrierError(StegambitError):
-    """Контейнер не может быть прочитан (побитый жизнью)."""
+    """The container cannot be read (battered beyond use)."""

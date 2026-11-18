@@ -1,21 +1,21 @@
 # Final Architecture Audit Report
 
-**Проект:** SteGambit (Multi-format Steganography Tool)
-**Доля соответствия изначальным требованиям:** 98% (Паттерны С4 и Clean Architecture успешно реализованы).
+**Project:** SteGambit (Multi-format Steganography Tool)
+**Share of compliance with the original requirements:** 98% (C4 patterns and Clean Architecture are implemented).
 
-## 1. Оценка слоев и модулей
-* **Presentation (GUI):** Полностью изолирован от бизнес-логики. Коммуникация с ядром идет исключительно через DTO (`StegoTaskRequest`, `StegoResponse`). Внедрен паттерн Worker-Thread (`QThread`), что исключает блокировку интерфейса. Архитектура слоя признана эталонной.
-* **Application / Facade (`StegoService`):** Выступает в роли "умного" оркестратора. Он не знает о деталях градиентов или DCT-зигзагов — он лишь делегирует задачи фабрикам форматов, `CryptoEngine`, абстракциям `Spreader` и `IStegoProcessor`. 
+## 1. Layer and Module Assessment
+* **Presentation (GUI):** Fully isolated from business logic. Communication with the core goes exclusively through DTOs (`StegoTaskRequest`, `StegoResponse`). The Worker-Thread pattern (`QThread`) is in place, so the interface is not blocked. The layer architecture is considered the reference design.
+* **Application / Facade (`StegoService`):** Acts as a "smart" orchestrator. It does not know the details of gradients or DCT zigzags — it only delegates work to format factories, `CryptoEngine`, and the `Spreader` and `IStegoProcessor` abstractions.
 * **Domain / Core:** 
-  * **File Formats (`FileFormat`):** Использован паттерн Adapter. Создан класс `JpegContainer`, решивший сложную задачу stateful-работы с JPEG (сохранение матриц квантования и таблиц Хаффмана при изменении коэффициентов).
-  * **Crypto Engine:** Разработан надежный механизм встраиваемого фрейминга (Magic, Flags, Salt, Nonce, Length). Гарантирует проверку целостности (AEAD) до попытки декодирования.
-  * **Stego Spreader Pipeline:** Алгоритмы поиска координат (Spreader) и математики внедрения (Processor) строго разделены паттерном Стратегия (Strategy).
+  * **File Formats (`FileFormat`):** The Adapter pattern is used. The `JpegContainer` class solves the hard problem of stateful JPEG handling (preserving quantization matrices and Huffman tables while coefficients change).
+  * **Crypto Engine:** A reliable embeddable framing mechanism was built (Magic, Flags, Salt, Nonce, Length). It guarantees an integrity check (AEAD) before any decode attempt.
+  * **Stego Spreader Pipeline:** Coordinate search (Spreader) and embedding math (Processor) are strictly separated by the Strategy pattern.
 
-## 2. Управление Техническим долгом (Technical Debt)
-В ходе E2E нагрузочного тестирования были приняты осознанные архитектурные компромиссы:
-1. **SSIM Metrics:** Из-за высокого overhead (~60% процессорного времени) метрика вынесена под опциональный флаг.
-2. **Decompression Bomb Limits:** Ограничения библиотеки Pillow не позволяют обрабатывать сверхбольшие PNG (>5 MB payload). Оставлено как системное ограничение (Limitation) MVP версии, так как стеганография исторически не применяется для скрытия массивных архивов.
-3. **DTO Reusability:** В Python (благодаря duck-typing) допущен trade-off в виде использования единого `StegoTaskRequest` для кодирования и декодирования ради снижения дублирования кода. Места со слабой семантикой задокументированы.
+## 2. Technical Debt Management
+During E2E load testing, deliberate architectural compromises were accepted:
+1. **SSIM Metrics:** Because of high overhead (~60% of CPU time), the metric sits behind an optional flag.
+2. **Decompression Bomb Limits:** Pillow limits prevent processing very large PNG files (>5 MB payload). Left as a system limitation of the MVP, because steganography is historically not used to hide massive archives.
+3. **DTO Reusability:** In Python (thanks to duck typing), a trade-off was accepted: a single `StegoTaskRequest` is used for both encoding and decoding to reduce code duplication. Places with weak semantics are documented.
 
-## 3. Вывод
-Архитектура SteGambit удовлетворяет требованиям слабой связанности (Low Coupling) и высокой связности (High Cohesion). Система готова к эксплуатации и обладает достаточным запасом прочности для добавления новых форматов (например, MP4) путем расширения интерфейсов, без модификации существующего ядра (OCP — Open-Closed Principle).
+## 3. Conclusion
+The SteGambit architecture meets the requirements of low coupling and high cohesion. The system is ready for use and has enough headroom to add new formats (for example, MP4) by extending interfaces, without modifying the existing core (OCP — Open-Closed Principle).

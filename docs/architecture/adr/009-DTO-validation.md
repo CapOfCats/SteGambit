@@ -1,18 +1,18 @@
-# ADR 009: Формат валидации DTO
+# ADR 009: DTO Validation Format
 
-**Статус:** Принято  
-**Контекст:** Задача #22 (Обработка ошибок и валидация). Возникла необходимость строгой валидации входящих данных от пользовательского интерфейса (пути к файлам, пароли). Рассматривалась возможность миграции DTO на `Pydantic v2`.  
+**Status:** Accepted  
+**Context:** Task #22 (Error handling and validation). Strict validation of incoming data from the user interface (file paths, passwords) became necessary. Migrating DTOs to `Pydantic v2` was considered.  
 
-## Решение
-Отказаться от внедрения `Pydantic` на текущем этапе жизненного цикла проекта. 
-Оставить DTO как `@dataclass(frozen=True)` из стандартной библиотеки Python, а валидацию реализовать вручную через встроенный механизм `__post_init__`.
+## Decision
+Do not adopt `Pydantic` at the current stage of the project lifecycle.
+Keep DTOs as `@dataclass(frozen=True)` from the Python standard library, and implement validation manually through the built-in `__post_init__` mechanism.
 
-## Обоснование
-1. **Отсутствие внешнего API:** Приложение является Desktop-решением (PyQt6). Данные формируются программно внутри приложения, а не приходят в виде нетипизированного JSON из внешнего мира, поэтому мощный механизм приведения типов (Type Coercion) `pydantic` избыточен.
-2. **Minimize External Dependencies:** Добавление `Pydantic v2` тянет за собой бинарную зависимость `pydantic-core` (на Rust), потенциально усложняя сборку и увеличивая размер дистрибутива.
-3. **YAGNI (You Aren't Gonna Need It):** Внедрение инструмента "на вырост" ломает существующий пул тестов проверки иммутабельности и требует переработки обработки ошибок ради сомнительной выгоды. 
+## Rationale
+1. **No external API:** The application is a desktop solution (PyQt6). Data is built programmatically inside the application and does not arrive as untyped JSON from the outside world, so `pydantic`'s powerful type-coercion mechanism is unnecessary.
+2. **Minimize External Dependencies:** Adding `Pydantic v2` pulls in the binary dependency `pydantic-core` (Rust), which can complicate the build and increase the distribution size.
+3. **YAGNI (You Aren't Gonna Need It):** Adopting a tool "for future growth" breaks the existing immutability test suite and requires reworking error handling for a doubtful benefit. 
 
-## Последствия (Следствия для реализации)
-* Валидация выполняется внутри `def __post_init__(self):`.
-* Ошибки бизнес-логики и контрактов должны бросать стандартные исключения Python (`ValueError`, `FileNotFoundError`), которые перехватываются на слое UI или при инициализации воркера.
-* Возможная мутация полей внутри `__post_init__` (например приведение путей) должна делаться обходным путем: `object.__setattr__(self, 'field', val)` из-за установленного флага `frozen=True`.
+## Consequences (Implementation Implications)
+* Validation runs inside `def __post_init__(self):`.
+* Business-logic and contract errors must raise standard Python exceptions (`ValueError`, `FileNotFoundError`), which are caught in the UI layer or when the worker is initialized.
+* Any field mutation inside `__post_init__` (for example, normalizing paths) must use a workaround: `object.__setattr__(self, 'field', val)`, because `frozen=True` is set.

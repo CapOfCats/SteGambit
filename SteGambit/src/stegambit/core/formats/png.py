@@ -6,52 +6,52 @@ import numpy as np
 from stegambit.core.exceptions import CorruptedCarrierError
 
 
-# Снятие DoS-защиты PIL для больших стего-носителей.
+# Disable PIL DoS protection for large stego carriers.
 #
-# Pillow по умолчанию запрещает изображения > ~178M пикселей (защита от decompression-bomb атак на веб-серверы). 
-# В контексте стеганографии это мешает: пользователь сознательно выбирает большой носитель ради ёмкости.
+# Pillow by default rejects images larger than ~178M pixels (protection against decompression-bomb attacks on web servers).
+# In a steganography context this gets in the way: the user deliberately chooses a large carrier for the sake of capacity.
 Image.MAX_IMAGE_PIXELS = None
 
-# Толерантность к slightly-обрезанным PNG. Без этого PIL падает на
-# последнем чанке IDAT при минимальной побитовой повреждённости файла.
+# Tolerance for slightly truncated PNGs. Without this, PIL fails on
+# the last IDAT chunk given the slightest bit-level corruption of the file.
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 class PngFormat(FileFormat):
-    """Реализация FileFormat для PNG-контейнеров.
+    """FileFormat implementation for PNG carriers.
 
-    Семантика:
-        * Загрузка через Pillow с принудительной конвертацией в RGB —
-          одноканальные / палитровые PNG приводятся к 3-канальному виду
-          для единообразия с LsbProcessor.
-        * Сохранение через Pillow в режиме PNG (lossless).
-        * DoS-защита PIL снята на уровне модуля (см. комментарий выше).
+    Semantics:
+        * Load via Pillow with forced conversion to RGB —
+          single-channel / paletted PNGs are brought to 3-channel form
+          for consistency with LsbProcessor.
+        * Save via Pillow in PNG mode (lossless).
+        * PIL DoS protection is disabled at module level (see the comment above).
 
     Note:
-        PNG-LSB чувствителен к любым lossy-преобразованиям. Поэтому save()
-        строго через PNG-encoder; конвертация в JPEG / другие форматы запрещена
-        на уровне политики анти-конверсии (см. StegoService.hide_data).
+        PNG-LSB is sensitive to any lossy transform. Therefore save()
+        goes strictly through the PNG encoder; conversion to JPEG / other formats is forbidden
+        by the anti-conversion policy (see StegoService.hide_data).
     """
 
     @property
     def magic(self) -> bytes:
-        """Magic bytes PNG: \\x89PNG (полный сигнатурный префикс - 8 байт,
-        но первых 4 достаточно для идентификации)."""
+        """PNG magic bytes: \\x89PNG (the full signature prefix is 8 bytes,
+        but the first 4 are enough for identification)."""
         return b'\x89PNG'
 
     def load(self, path: Path) -> np.ndarray:
-        """Декодирует PNG в RGB ndarray shape=(H, W, 3), dtype=uint8.
+        """Decodes a PNG into an RGB ndarray of shape=(H, W, 3), dtype=uint8.
 
         Args:
-            path: Путь к существующему .png файлу.
+            path: Path to an existing .png file.
 
         Returns:
-            RGB-массив. Альфа-канал и палитра конвертируются в RGB.
+            RGB array. The alpha channel and palette are converted to RGB.
 
         Raises:
-            FileNotFoundError:     Файл не существует.
-            CorruptedCarrierError: Pillow не смог декодировать (битый PNG,
-                                   неверный формат, обрезанный файл).
+            FileNotFoundError:     The file does not exist.
+            CorruptedCarrierError: Pillow failed to decode (corrupt PNG,
+                                   wrong format, truncated file).
         """
         if not path.exists():
             raise FileNotFoundError(f"Файл не найден: {path}")
@@ -68,15 +68,15 @@ class PngFormat(FileFormat):
             ) from e
 
     def save(self, data: np.ndarray, path: Path) -> None:
-        """Сохраняет RGB ndarray в PNG.
+        """Saves an RGB ndarray as PNG.
 
         Args:
-            data: RGB-массив shape=(H, W, 3), dtype=uint8.
-            path: Путь сохранения с расширением .png.
+            data: RGB array of shape=(H, W, 3), dtype=uint8.
+            path: Save path with a .png extension.
 
         Note:
-            Сжатие - стандартное Pillow (deflate). Без оптимизации, чтобы
-            не тратить время на тяжёлый optimize=True.
+            Compression is Pillow's default (deflate). Optimization is skipped so
+            we do not spend time on the heavy optimize=True.
         """
         with open(path, "wb") as f:
             Image.fromarray(data).save(f, "PNG")
